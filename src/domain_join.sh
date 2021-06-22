@@ -1,0 +1,241 @@
+#!/bin/bash -e
+
+trap onerr ERR
+trap onexit EXIT
+
+#trap handler 
+onerr() { 
+        echo "!!!!!!!!!!!!!!!!! ERROR while executing domain join !!!!!!!!!!!!!!!!!"
+        exit 1
+}
+
+#trap handler 
+onexit() { 
+        # delete password on exit
+        JOIN_PASSWORD=""
+}
+
+
+JOIN_USER=""
+PERMITTED_GROUPS=""
+JOIN_PASSWORD=""
+DOMAIN_NAME=""
+TIMEZONE="Europe/Berlin"
+DOMAIN_CONTROLLER=""
+
+
+
+if [ "$(id -u)" -ne 0 ]; then
+        echo "This script must be run as root in order to join to the given domain. Exiting..."
+        exit
+fi
+
+# choose the time zone 
+choose_timezone () {
+        local TIMELIST
+        local COUNTER
+        local RADIOLIST
+        local TIMEZONE_NR
+        local TIMEZONE
+        
+        TIMELIST=$(timedatectl list-timezones)
+        COUNTER=1
+        RADIOLIST=""  # variable where we will keep the list entries for radiolist dialog
+        TIMEZONE_NR=0
+        
+        for i in $TIMELIST; do
+                RADIOLIST="$RADIOLIST $COUNTER $i off "
+                let COUNTER=COUNTER+1
+        done
+        
+        # shellcheck disable=SC2086
+        TIMEZONE_NR=$(dialog --backtitle "choose timezone" --radiolist "Select option:" 0 0 $COUNTER $RADIOLIST 3>&1 1>&2 2>&3 3>&-)
+
+        COUNTER=1
+        for i in $TIMELIST; do
+                if [ $COUNTER -eq "$TIMEZONE_NR" ]; then
+                        TIMEZONE=$i
+                        break
+                fi
+                let COUNTER=COUNTER+1
+        done
+        
+        #set the timezone
+        timedatectl set-timezone "${TIMEZONE}"
+}
+
+
+# set the groups that can log in 
+# first param: the join user that is used to setup domain membership
+set_group_policies () {
+        local JOIN_USER
+        local PERMITTED_GROUPS
+        JOIN_USER="${1}"
+        PERMITTED_GROUPS=$(dialog --title "permitted groups"  --inputbox "Enter the groups of the domain that shall be permitted to log in. Groups must be comma separated.\\nLeave blank if you want allow all domain users to login." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
+
+        #remove spaces
+        PERMITTED_GROUPS=$(echo "${PERMITTED_GROUPS}" | tr -d '[:space:]')
+
+        clear
+
+        if [ -z "${PERMITTED_GROUPS}" ]; then
+                echo "permit all users to login"
+                realm permit --all
+        else
+                #allow all groups that shall be able to log in
+                echo "allow given groups"
+                realm deny --all
+                realm permit "${JOIN_USER}@${DOMAIN_NAME}"
+                SAVEIFS=$IFS
+                IFS=","
+                for i in ${PERMITTED_GROUPS}
+                do
+                        realm permit -g "${i}" 
+                done
+                IFS=$SAVEIFS
+        fi
+}
+
+
+# install krb5-user package in order to not get any dialogs presented, since the configuration files must be there, first.
+# first param: domain name
+install_krb5_package() {
+        local KRB5_UNCONF
+        local KRB5_CONF
+        local DOMAIN_NAME
+        
+        KRB5_UNCONF="/etc/krb5.conf.unconfigured"
+        KRB5_CONF="/etc/krb5.conf"
+        DOMAIN_NAME="${1}"
+        echo "install krb5-user"
+        if [ -f "${KRB5_UNCONF}" ]; then
+                cp "${KRB5_UNCONF}" "${KRB5_CONF}"
+                sed -i "s/REALM_NAME/${DOMAIN_NAME^^}/g" "${KRB5_CONF}"
+        fi
+        apt install krb5-user -y
+}
+
+# set the domanin name in realmd configuration
+# first param: domain name
+set_domain_realmd() {
+        local DOMAIN_NAME
+        DOMAIN_NAME="${1}"
+        REALMD_FILE="/etc/realmd.conf"
+        
+        if [ -f "${REALMD_FILE}" ]; then
+                sed -i "s/DOMAIN_NAME/${DOMAIN_NAME}/g" "${REALMD_FILE}"
+        fi
+}
+
+
+# set the timeserver to use
+# first param:  domain controller
+set_timeserver() {
+        local NTP_SERVER
+        local DOMAIN_CONTROLLER
+        
+        DOMAIN_CONTROLLER="${1}"
+        
+        echo "set timeserver"
+        NTP_SERVER=$(dialog --title "NTP server" --inputbox "Enter the NTP server (domain controller) you want to use. \\nE.g.: srv-dc01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-)
+        TIMESYNCD_FILE="/etc/systemd/timesyncd.conf"
+        if grep -q "#[[:space:]]*NTP" "$TIMESYNCD_FILE"; then
+                # if NTP is commented out
+                sed -i "s/#[[:space:]]*NTP=/NTP=/g" "$TIMESYNCD_FILE"
+        fi
+        sed -i "s/^NTP=.*/NTP=${NTP_SERVER}/g" "$TIMESYNCD_FILE"
+
+        systemctl restart systemd-timesyncd.service
+}
+
+# configure available shares for automatic mounting on login
+# first param: domain controller
+configure_shares() { 
+        local DOMAIN_CONTROLLER
+        local FILE_SERVER
+        local DRIVE_LIST
+        local MNT_POINT
+        local PAM_MOUNT_FILE
+        local MOUNT_STR
+        local FILE_SERVER
+        
+        PAM_MOUNT_FILE="/etc/security/pam_mount.conf.xml"
+        DOMAIN_CONTROLLER="${1}"
+        FILE_SERVER=$(dialog --title "fileserver" --inputbox "Enter the fileserver to use for mounting of drives when a user logs in. \\nE.g.: srv-file01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-) 
+        DRIVE_LIST=$(smbclient -k -N  -U "${JOIN_USER}" -L "${FILE_SERVER}" 2> /dev/null | grep Disk  | grep -v -E "ADMIN\\$|SYSVOL|NETLOGON" | cut -d " " -f 1 | grep -E "[a-zA-Z0-9]{2,}(\\$)*" | tr -d '\t')
+
+
+        if [ -n "${DRIVE_LIST}" ]; then
+                for i in ${DRIVE_LIST}; do
+                        MNT_POINT=$(echo "${i}" | tr -d '$')
+                        CHECKLIST+=("${i} /media/\$USER/${MNT_POINT} off ")
+                done
+                
+                
+                # shellcheck disable=SC2068
+                DRIVE_LIST=$(dialog --backtitle "Choose Drives to mount" --checklist "Choose which drives shall be mounted when a user logs in..." 10 60 ${#CHECKLIST[@]} ${CHECKLIST[@]} 3>&1 1>&2 2>&3 3>&-)        
+                dialog --clear
+                clear
+
+                for i in ${DRIVE_LIST}; do
+                        i=$(echo "${i}" | tr -d '"')
+                        MNT_POINT=$(echo "${i}" | tr -d '$')
+                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev\" uid=\"5000-999999999\""
+                        if [ -f "${PAM_MOUNT_FILE}" ]; then
+                                xmlstarlet ed --inplace -s '/pam_mount' -t elem -n "${MOUNT_STR}" "${PAM_MOUNT_FILE}"
+                        else
+                                dialog --msgbox "error writing mount entries in ${PAM_MOUNT_FILE}" 5 40 3>&1 1>&2 2>&3 3>&-
+                                exit 2
+                        fi
+                done
+        else
+                dialog --msgbox "No Drives found for given fileserver ${FILE_SERVER}" 5 40 3>&1 1>&2 2>&3 3>&-
+        fi
+}
+
+#find domain controller
+DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
+DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
+DNS_SERVER_NAME=${DNS_SERVER_NAME%?}
+DOMAIN_NAME=$(echo "${DNS_SERVER_NAME}" | cut -d '.' -f2-)
+DOMAIN_CONTROLLER="${DNS_SERVER_NAME}"
+
+#set domain name in realm configuration
+set_domain_realmd "${DOMAIN_NAME}"
+
+#choose the timezone
+choose_timezone
+#set NTP server
+set_timeserver "${DOMAIN_CONTROLLER}"
+
+# enter domain controller
+DOMAIN_CONTROLLER=$(dialog --title "domain controller" --inputbox "Enter the domain controller you want to use for joining the domain. \\nE.g.: srv-dc01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-) 
+# enter domain name
+DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
+# choose domain user to use for joining the domain
+JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
+# enter password for join user
+JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
+# join the given domain with the given user
+echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
+
+
+#install krb5-user package 
+install_krb5_package "${DOMAIN_NAME}"
+
+set_group_policies "${JOIN_USER}"
+
+systemctl restart sssd
+
+# get a kerberos ticket for the join user
+echo "${JOIN_PASSWORD}" | kinit "${JOIN_USER}"
+# delete the password of the join user
+JOIN_PASSWORD=""
+
+echo "############### DOMAIN JOIN SUCCESSFUL #################"
+
+
+configure_shares "${DOMAIN_CONTROLLER}"
+
+
+echo "############### SHARES CONFIGURATION SUCCESSFUL #################"

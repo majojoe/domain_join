@@ -1,0 +1,15 @@
+ #!/bin/bash
+
+OS_NAME=$(lsb_release -i | cut -f 2 -d ':' | xargs)
+OS_VERSION=$(lsb_release -r | cut -f 2 -d ':' | xargs)
+
+#set OS name and version in realmd.conf
+echo "set OS"
+sed -i "s/OS-NAME/${OS_NAME}/g" /etc/realmd.conf
+sed -i "s/OS-VERSION/${OS_VERSION}/g" /etc/realmd.conf
+
+#update pam auth that the homedir is created automatically
+echo "enable mkhomedir"
+pam-auth-update --enable dj_mkhomedir
+systemctl restart sssd
+

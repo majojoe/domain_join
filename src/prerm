@@ -1,0 +1,5 @@
+#!/bin/bash
+
+echo "disable mkhomedir"
+pam-auth-update --remove dj_mkhomedir
+systemctl restart sssd
