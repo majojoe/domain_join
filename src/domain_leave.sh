@@ -43,7 +43,7 @@ JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to 
 # enter password for join user
 JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
 # leave the given domain with the given user
-echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
+echo "${JOIN_PASSWORD}" | realm -v leave -U "${JOIN_USER}" "${DOMAIN_NAME}"
 # delete the password of the join user
 JOIN_PASSWORD=""
 

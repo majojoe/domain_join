@@ -238,4 +238,4 @@ echo "############### DOMAIN JOIN SUCCESSFUL #################"
 configure_shares "${DOMAIN_CONTROLLER}"
 
 
-echo "############### SHARES CONFIGURATION SUCCESSFUL #################"
+echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFUL #################"
