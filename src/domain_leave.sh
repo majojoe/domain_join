@@ -47,12 +47,10 @@ echo "${JOIN_PASSWORD}" | realm -v leave -U "${JOIN_USER}" "${DOMAIN_NAME}"
 # delete the password of the join user
 JOIN_PASSWORD=""
 
-systemctl restart sssd
-
 echo "############### LEFT DOMAIN SUCCESSFUL #################"
 
 
 #unconfigure_shares "${DOMAIN_CONTROLLER}"
 
 
-echo "############### SHARES CONFIGURATION SUCCESSFUL #################"
+echo "############### SHARES REMOVED #################"
