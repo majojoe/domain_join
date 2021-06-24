@@ -47,10 +47,9 @@ echo "${JOIN_PASSWORD}" | realm -v leave -U "${JOIN_USER}" "${DOMAIN_NAME}"
 # delete the password of the join user
 JOIN_PASSWORD=""
 
-echo "############### LEFT DOMAIN SUCCESSFUL #################"
-
-
 #unconfigure_shares "${DOMAIN_CONTROLLER}"
+xmlstarlet ed -d "//volume[contains(@server, \"${DOMAIN_NAME}\") and @fstype=\"cifs\"]" 
 
 
-echo "############### SHARES REMOVED #################"
+
+echo "############### LEFT DOMAIN SUCCESSFUL AND SHARES REMOVED #################"
