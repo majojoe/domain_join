@@ -20,6 +20,7 @@ JOIN_USER=""
 JOIN_PASSWORD=""
 DOMAIN_NAME=""
 DOMAIN_CONTROLLER=""
+PAM_MOUNT_FILE="/etc/security/pam_mount.conf.xml"
 
 
 
@@ -48,8 +49,16 @@ echo "${JOIN_PASSWORD}" | realm -v leave -U "${JOIN_USER}" "${DOMAIN_NAME}"
 JOIN_PASSWORD=""
 
 #unconfigure_shares "${DOMAIN_CONTROLLER}"
-xmlstarlet ed -d "//volume[contains(@server, \"${DOMAIN_NAME}\") and @fstype=\"cifs\"]" 
+xmlstarlet ed --inplace -d "//volume[contains(@server, \"${DOMAIN_NAME}\") and @fstype=\"cifs\"]" "${PAM_MOUNT_FILE}"
+
+SSSD_CONF_FILE="/etc/sssd/sssd.conf"
+if [ -f ${SSSD_CONF_FILE} ]; then
+        rm "${SSSD_CONF_FILE}"
+fi
 
 
+
+dialog --clear
+clear
 
 echo "############### LEFT DOMAIN SUCCESSFUL AND SHARES REMOVED #################"
