@@ -193,6 +193,16 @@ configure_shares() {
         fi
 }
 
+# configure to use fully qualified names
+use_fully_qualified_names() {
+        REALMD_FILE="/etc/realmd.conf"
+        
+        if [ -f "${REALMD_FILE}" ]; then
+                sed -i "/^default-home\s=/s/=.*/= \/home\/%u@%d/" "${REALMD_FILE}"
+                sed -i "/^fully-qualified-names\s=/s/=.*/= yes/" "${REALMD_FILE}"
+        fi
+}
+
 #find domain controller
 DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
 DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
@@ -212,6 +222,10 @@ set_timeserver "${DOMAIN_CONTROLLER}"
 DOMAIN_CONTROLLER=$(dialog --title "domain controller" --inputbox "Enter the domain controller you want to use for joining the domain. \\nE.g.: srv-dc01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-) 
 # enter domain name
 DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
+FULLY_QUALIFIED_NAMES=$(dialog --single-quoted --backtitle "fully qualified names" --checklist "Choose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option." 10 60 1 'use fully qualified names' "" off 3>&1 1>&2 2>&3 3>&-)        
+if [ -n "${FULLY_QUALIFIED_NAMES}" ]; then
+        use_fully_qualified_names
+fi
 # choose domain user to use for joining the domain
 JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
 # enter password for join user
