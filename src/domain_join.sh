@@ -22,6 +22,7 @@ JOIN_PASSWORD=""
 DOMAIN_NAME=""
 TIMEZONE="Europe/Berlin"
 DOMAIN_CONTROLLER=""
+FULLY_QUALIFIED_DN=0
 
 
 
@@ -203,6 +204,41 @@ use_fully_qualified_names() {
         fi
 }
 
+# set administrative rights for domain users/groups 
+# first param: 0 if no FQDNs are used, 1 if FQDNs are used for users/groups
+# second param: the fully qualified domain name
+set_sudo_users_or_groups() {
+        local FQDN 
+        local DN
+        local PERMITTED_AD_ENTITIES
+        local SAVEIFS
+        local SUDOERS_AD_FILE
+        FQDN=$1
+        DN="${2}"
+        SUDOERS_AD_FILE="/etc/sudoers.d/active_directory"
+        PERMITTED_AD_ENTITIES=$(dialog --title "administrative rights for domain users/groups"  --inputbox "Enter the domain users or groups that shall be allowed to gain administrative rights. \\nUsers/groups must be comma separated. \\nGroups must be prepended by a '%' sign.\\nLeave blank if you don't want allow any user/group in the domain to gain administrative rights.\\n " 15 60 "" 3>&1 1>&2 2>&3 3>&-)
+
+        clear
+
+        if [ -n "${PERMITTED_AD_ENTITIES}" ]; then
+                echo "administrative rights for given users/groups"
+                SAVEIFS=$IFS
+                IFS=","
+                for i in ${PERMITTED_AD_ENTITIES}
+                do
+                        I_NO_SPACE="$(echo -e "${i}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+                        if [ $FQDN -eq 1 ]; then
+                                #use fully qualified domain names
+                                echo "\"${I_NO_SPACE}@${DN}\" ALL=(ALL:ALL) ALL" >> "${SUDOERS_AD_FILE}"
+                        else
+                                echo "\"${I_NO_SPACE}\" ALL=(ALL:ALL) ALL" >> "${SUDOERS_AD_FILE}"
+                        fi
+                        
+                done
+                IFS=$SAVEIFS
+        fi
+}
+
 #find domain controller
 DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
 DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
@@ -224,6 +260,7 @@ DOMAIN_CONTROLLER=$(dialog --title "domain controller" --inputbox "Enter the dom
 DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
 FULLY_QUALIFIED_NAMES=$(dialog --single-quoted --backtitle "fully qualified names" --checklist "Choose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option." 10 60 1 'use fully qualified names' "" off 3>&1 1>&2 2>&3 3>&-)        
 if [ -n "${FULLY_QUALIFIED_NAMES}" ]; then
+        FULLY_QUALIFIED_DN=1
         use_fully_qualified_names
 fi
 # choose domain user to use for joining the domain
@@ -246,10 +283,8 @@ echo "${JOIN_PASSWORD}" | kinit "${JOIN_USER}"
 # delete the password of the join user
 JOIN_PASSWORD=""
 
-echo "############### DOMAIN JOIN SUCCESSFUL #################"
-
-
 configure_shares "${DOMAIN_CONTROLLER}"
 
+set_sudo_users_or_groups ${FULLY_QUALIFIED_DN} "${DOMAIN_NAME}"
 
-echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFUL #################"
+echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFULL #################"

@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.8.11)
 
 
 install(FILES src/realmd.conf DESTINATION /etc)
+install(FILES src/active_directory DESTINATION /etc/sudoers.d PERMISSIONS OWNER_READ GROUP_READ)
 install(FILES src/dj_mkhomedir.conf DESTINATION /usr/share/pam-configs/)
 install(FILES src/krb5.conf.unconfigured DESTINATION /etc)
 install(FILES src/domain_join.sh DESTINATION bin PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)

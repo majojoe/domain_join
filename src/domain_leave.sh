@@ -43,6 +43,10 @@ DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you
 JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for leaving the domain" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
 # enter password for join user
 JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
+
+dialog --clear
+clear
+
 # leave the given domain with the given user
 echo "${JOIN_PASSWORD}" | realm -v leave -U "${JOIN_USER}" "${DOMAIN_NAME}"
 # delete the password of the join user
@@ -58,7 +62,5 @@ fi
 
 
 
-dialog --clear
-clear
 
-echo "############### LEFT DOMAIN SUCCESSFUL AND SHARES REMOVED #################"
+echo "############### LEFT DOMAIN SUCCESSFULL AND SHARES REMOVED #################"
