@@ -19,7 +19,6 @@ onexit() {
 JOIN_USER=""
 JOIN_PASSWORD=""
 DOMAIN_NAME=""
-DOMAIN_CONTROLLER=""
 PAM_MOUNT_FILE="/etc/security/pam_mount.conf.xml"
 
 
@@ -52,7 +51,7 @@ echo "${JOIN_PASSWORD}" | realm -v leave -U "${JOIN_USER}" "${DOMAIN_NAME}"
 # delete the password of the join user
 JOIN_PASSWORD=""
 
-#unconfigure_shares "${DOMAIN_CONTROLLER}"
+#unconfigure_shares 
 xmlstarlet ed --inplace -d "//volume[contains(@server, \"${DOMAIN_NAME}\") and @fstype=\"cifs\"]" "${PAM_MOUNT_FILE}"
 
 SSSD_CONF_FILE="/etc/sssd/sssd.conf"
