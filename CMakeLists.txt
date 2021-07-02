@@ -10,10 +10,10 @@ install(FILES src/domain_leave.sh DESTINATION bin PERMISSIONS OWNER_READ OWNER_W
 
 set(CPACK_PACKAGE_NAME "domain-join")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "meta package that automates domain join for ubuntu systems")
-set(CPACK_PACKAGE_VERSION "0.0.1")
+set(CPACK_PACKAGE_VERSION "0.0.2")
 set(SYSTEM_ARCH "all")
 
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "realmd,sssd,sssd-tools,samba-common,packagekit,samba-common-bin,samba-libs,adcli,cifs-utils,libpam-mount,libpam-ccreds,findutils,dialog,libpam-sss,coreutils,xmlstarlet")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "realmd,sssd,sssd-tools,samba-common,packagekit,samba-common-bin,samba-libs,adcli,cifs-utils,libpam-mount,libpam-ccreds,findutils,dialog,libpam-sss,coreutils,xmlstarlet,smbclient")
 set(CPACK_GENERATOR "DEB")
 set(PACKAGE_OS "linux")
 set(CPACK_SYSTEM_NAME "${PACKAGE_OS}-amd64")
