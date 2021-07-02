@@ -1,9 +1,5 @@
 **Table of Contents**
 
-[TOCM]
-
-[TOC]
-
 # Why domain join?
 In a Enterprise environment it is state of the art to have a network that is managed by a domain controller. In Linux it can be a pain to join to a AD domain. In order to make it nearly as convenient as in windows to join the domain, this script has been written.
 # Installation
