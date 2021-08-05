@@ -5,7 +5,7 @@ In a Enterprise environment it is state of the art to have a network that is man
 # Installation
 Download [here](https://github.com/majojoe/domain_join/releases/download/v0.0.3/domain-join-0.0.3-linux-amd64.deb) and install the \*.deb package provided using the following command:
 ```bash
-sudo apt install ./domain-join-0.0.2-linux-amd64.deb
+sudo apt install ./domain-join-0.0.3-linux-amd64.deb
 ```
 # Join a domain
 Execute the join script as so:
