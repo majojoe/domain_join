@@ -261,6 +261,14 @@ set_std_groups_for_domain() {
         fi
 }
 
+# add possibility to login with xrdp when used
+allow_xrdp_login() {
+# add some options to sssd.conf to allow login with xrdp
+        SSSD_CONF_FILE="/etc/sssd/sssd.conf"
+        if [ -f ${SSSD_CONF_FILE} ]; then
+                sed -i '/^\[domain\/.*/a ad_gpo_access_control = enforcing\nad_gpo_map_remote_interactive = +xrdp-sesman' "${SSSD_CONF_FILE}"
+        fi
+}
 
 
 #find domain controller
@@ -312,5 +320,7 @@ configure_shares "${DOMAIN_CONTROLLER}"
 set_sudo_users_or_groups ${FULLY_QUALIFIED_DN} "${DOMAIN_NAME}"
 
 set_std_groups_for_domain 
+
+allow_xrdp_login
 
 echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFULL #################"
