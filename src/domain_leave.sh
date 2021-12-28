@@ -59,6 +59,16 @@ if [ -f ${SSSD_CONF_FILE} ]; then
         rm "${SSSD_CONF_FILE}"
 fi
 
+# remove line that adds the std groups for all domain users
+sed -i '/*;*;*;Al0000-2400;adm,cdrom,dip,plugdev,lpadmin,lxd,sambashare/d' /etc/security/group.conf
+# remove all domain users from sudo group
+DU_SUDO_FILE=/etc/domain_user_for_sudo.conf
+if [ -f "${DU_SUDO_FILE}" ]; then
+        while read -r username 
+        do 
+                gpasswd -d "${username}" sudo
+        done < "${DU_SUDO_FILE}"
+fi
 
 
 

@@ -46,6 +46,7 @@ choose_timezone () {
         
         for i in $TIMELIST; do
                 RADIOLIST="$RADIOLIST $COUNTER $i off "
+                # shellcheck disable=SC2219
                 let COUNTER=COUNTER+1
         done
         
@@ -58,6 +59,7 @@ choose_timezone () {
                         TIMEZONE=$i
                         break
                 fi
+                # shellcheck disable=SC2219
                 let COUNTER=COUNTER+1
         done
         
@@ -213,9 +215,11 @@ set_sudo_users_or_groups() {
         local PERMITTED_AD_ENTITIES
         local SAVEIFS
         local SUDOERS_AD_FILE
+        local DU_SUDO_FILE
         FQDN=$1
         DN="${2}"
         SUDOERS_AD_FILE="/etc/sudoers.d/active_directory"
+        DU_SUDO_FILE="/etc/domain_user_for_sudo.conf"
         PERMITTED_AD_ENTITIES=$(dialog --title "administrative rights for domain users/groups"  --inputbox "Enter the domain users or groups that shall be allowed to gain administrative rights. \\nUsers/groups must be comma separated. \\nGroups must be prepended by a '%' sign.\\nLeave blank if you don't want allow any user/group in the domain to gain administrative rights.\\n " 15 60 "" 3>&1 1>&2 2>&3 3>&-)
 
         clear
@@ -227,17 +231,45 @@ set_sudo_users_or_groups() {
                 for i in ${PERMITTED_AD_ENTITIES}
                 do
                         I_NO_SPACE="$(echo -e "${i}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+                        # shellcheck disable=SC2086
                         if [ $FQDN -eq 1 ]; then
                                 #use fully qualified domain names
                                 echo "\"${I_NO_SPACE}@${DN}\" ALL=(ALL:ALL) ALL" >> "${SUDOERS_AD_FILE}"
+                                if ! [[ "${I_NO_SPACE}" = %* ]]; then
+                                        usermod -aG sudo "${I_NO_SPACE}@${DN}"
+                                        echo "${I_NO_SPACE}@${DN}" >> "${DU_SUDO_FILE}"
+                                fi
                         else
                                 echo "\"${I_NO_SPACE}\" ALL=(ALL:ALL) ALL" >> "${SUDOERS_AD_FILE}"
+                                if ! [[ "${I_NO_SPACE}" = %* ]]; then
+                                        usermod -aG sudo "${I_NO_SPACE}"
+                                        echo "${I_NO_SPACE}" >> "${DU_SUDO_FILE}"
+                                fi
                         fi
                         
                 done
                 IFS=$SAVEIFS
         fi
 }
+
+# set the standard groups for domain users
+set_std_groups_for_domain() {
+        local GROUPS_FILE
+        GROUPS_FILE="/etc/security/group.conf"
+        if [ -f "${GROUPS_FILE}" ]; then
+                sed -i '/^#xsh; tty\* ;%admin;Al0000-2400;plugdev.*/a \\n*;*;*;Al0000-2400;adm,cdrom,dip,plugdev,lpadmin,lxd,sambashare' "${GROUPS_FILE}"
+        fi
+}
+
+# add possibility to login with xrdp when used
+allow_xrdp_login() {
+# add some options to sssd.conf to allow login with xrdp
+        SSSD_CONF_FILE="/etc/sssd/sssd.conf"
+        if [ -f ${SSSD_CONF_FILE} ]; then
+                sed -i '/^\[domain\/.*/a ad_gpo_access_control = enforcing\nad_gpo_map_remote_interactive = +xrdp-sesman' "${SSSD_CONF_FILE}"
+        fi
+}
+
 
 #find domain controller
 DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
@@ -286,5 +318,9 @@ JOIN_PASSWORD=""
 configure_shares "${DOMAIN_CONTROLLER}"
 
 set_sudo_users_or_groups ${FULLY_QUALIFIED_DN} "${DOMAIN_NAME}"
+
+set_std_groups_for_domain 
+
+allow_xrdp_login
 
 echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFULL #################"
