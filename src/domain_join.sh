@@ -124,7 +124,7 @@ install_krb5_package() {
                 
                 #realm definiton
                 DOMAIN_UPPER=${DOMAIN_NAME^^}
-                REALM_DEFINITION="${DOMAIN_UPPER} = {\n"
+                REALM_DEFINITION="${DOMAIN_UPPER} = {"
                 DC_DNS_LIST=$(nslookup -type=srv _kerberos._tcp."${DOMAIN_NAME}" | grep "${DOMAIN_NAME}" | pcregrep -o1 "(\S+)\.$")
                 DC_LIST=()
                 while IFS= read -r DC; do
@@ -133,14 +133,14 @@ install_krb5_package() {
 
                 for i in "${DC_LIST[@]}"
                 do
-                        REALM_DEFINITION="${REALM_DEFINITION}\n    kdc = $i"
+                        REALM_DEFINITION="${REALM_DEFINITION}\n        kdc = $i"
                 done
                 
-                REALM_DEFINITION="${REALM_DEFINITION}\nadmin_server = ${ADMIN_SERVER}\n}"
+                REALM_DEFINITION="${REALM_DEFINITION}\n        admin_server = ${ADMIN_SERVER}\n}"
                 sed -i "s/REALM_DEFINITION/${REALM_DEFINITION}/g" "${KRB5_CONF}"
                 
                 # domain realm
-                DOMAIN_REALM=".${DOMAIN_NAME} = ${DOMAIN_UPPER}\n${DOMAIN_NAME} = ${DOMAIN_UPPER}"
+                DOMAIN_REALM="        .${DOMAIN_NAME} = ${DOMAIN_UPPER}\n        ${DOMAIN_NAME} = ${DOMAIN_UPPER}"
                 sed -i "s/DOMAIN_REALM/${DOMAIN_REALM}/g" "${KRB5_CONF}"                
         fi
         apt install krb5-user -y
@@ -322,7 +322,6 @@ set_timeserver "${DOMAIN_CONTROLLER}"
 
 # enter domain controller
 DOMAIN_CONTROLLER=$(dialog --title "domain controller" --inputbox "Enter the domain controller you want to use for joining the domain. \\nE.g.: srv-dc01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-) 
-dialog --title "BDC available?" --yesno "Is there any backup domain controller?" 12 40 
 # enter domain name
 DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
 FULLY_QUALIFIED_NAMES=$(dialog --single-quoted --backtitle "fully qualified names" --checklist "Choose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option." 10 60 1 'use fully qualified names' "" off 3>&1 1>&2 2>&3 3>&-)        
