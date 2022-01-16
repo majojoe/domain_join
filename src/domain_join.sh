@@ -158,6 +158,21 @@ set_domain_realmd() {
         fi
 }
 
+# set the domanin in /etc/hosts
+# first param: domain name
+set_domain_hosts() {
+        local DOMAIN_NAME
+        DOMAIN_NAME="${1}"
+        HOSTS_FILE="/etc/hosts"
+        HOSTNAME_STR=$(hostname)
+        HOSTNAME_ENTRY=$(cat "${HOSTS_FILE}" | grep "127.0.1.1")
+        
+        if [ -f "${HOSTS_FILE}" ]; then     
+                if ! echo "${HOSTNAME_ENTRY}" | grep -q "${DOMAIN_NAME}"; then
+                        sed -i "s/127.0.1.1.*/127.0.1.1       ${HOSTNAME_STR}.${DOMAIN_NAME}  ${HOSTNAME_STR}/g" "${HOSTS_FILE}"
+                fi
+        fi
+}
 
 # set the timeserver to use
 # first param:  domain controller
@@ -314,6 +329,9 @@ DOMAIN_CONTROLLER="${DNS_SERVER_NAME}"
 
 #set domain name in realm configuration
 set_domain_realmd "${DOMAIN_NAME}"
+
+#set domain name in /etc/hosts
+set_domain_hosts  "${DOMAIN_NAME}"
 
 #choose the timezone
 choose_timezone

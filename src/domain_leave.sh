@@ -28,6 +28,23 @@ if [ "$(id -u)" -ne 0 ]; then
         exit
 fi
 
+# remove the domanin in /etc/hosts
+# first param: domain name
+remove_domain_hosts() {
+        local DOMAIN_NAME
+        DOMAIN_NAME="${1}"
+        HOSTS_FILE="/etc/hosts"
+        HOSTNAME_STR=$(hostname)
+        HOSTNAME_ENTRY=$(cat "${HOSTS_FILE}" | grep "127.0.1.1")
+        
+        if [ -f "${HOSTS_FILE}" ]; then     
+                if echo "${HOSTNAME_ENTRY}" | grep -q "${DOMAIN_NAME}"; then
+                        sed -i "s/127.0.1.1.*/127.0.1.1       ${HOSTNAME_STR}/g" "${HOSTS_FILE}"
+                fi
+        fi
+}
+
+
 
 #find domain controller
 DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
@@ -70,6 +87,7 @@ if [ -f "${DU_SUDO_FILE}" ]; then
         done < "${DU_SUDO_FILE}"
 fi
 
-
+#remove domain from hosts file
+remove_domain_hosts "${DOMAIN_NAME}"
 
 echo "############### LEFT DOMAIN SUCCESSFULL AND SHARES REMOVED #################"
