@@ -106,7 +106,6 @@ set_group_policies () {
 # second param: admin server (main domain controller)
 configure_krb5_package() {
         local KRB5_UNCONF
-        local KRB5_CONF
         local DOMAIN_NAME
         local ADMIN_SERVER
         local DOMAIN_REALM
@@ -326,7 +325,7 @@ correct_input_method() {
 
 # activate weak crypto (DES)
 activate_weak_crypto() {
-        sed -i "s/#[[:space:]]*allow_weak_crypto/        allow_weak_crypto = true/g" "${KRB5_CONF}"
+        sed -i "s/#[[:space:]]*allow_weak_crypto.*/        allow_weak_crypto = true/g" "${KRB5_CONF}"
 }
 
 #find domain controller
@@ -364,17 +363,20 @@ esac
 JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
 # enter password for join user
 JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
-# join the given domain with the given user
-echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
 
-
-#install krb5-user package 
+# configure krb5.conf before joining the domain
 configure_krb5_package "${DOMAIN_NAME}" "${DOMAIN_CONTROLLER}"
 case "${DOMAIN_OPTIONS}" in
         *"allow weak crypto"*) 
         activate_weak_crypto;
         ;;
 esac
+
+# join the given domain with the given user
+echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
+
+
+#install krb5-user package 
 install_krb5_package
 
 set_group_policies "${JOIN_USER}"
