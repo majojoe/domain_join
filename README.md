@@ -1,5 +1,5 @@
 **Table of Contents**
-- [Why domain join?](#why-domain-join-)
+- [Why domain join?](#why-domain-join)
 - [Installation](#installation)
 - [Join a domain](#join-a-domain)
 - [Leave a Domain](#leave-a-domain)
@@ -9,7 +9,7 @@
     + [Firefox](#firefox)
   * [References](#references)
 - [Troubleshooting](#troubleshooting)
-  * [.local TLD and Ubuntu 18.04](#local-tld-and-ubuntu-18-04)
+  * [.local TLD and Ubuntu 18.04](#local-tld-and-ubuntu-1804)
 
 
 
