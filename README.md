@@ -1,11 +1,22 @@
 **Table of Contents**
+- [Why domain join?](#why-domain-join-)
+- [Installation](#installation)
+- [Join a domain](#join-a-domain)
+- [Leave a Domain](#leave-a-domain)
+- [SSO with AD and Apache](#sso-with-ad-and-apache)
+  * [Enable Kerberos in Apache](#enable-kerberos-in-apache)
+  * [Configure browsers](#configure-browsers)
+    + [Firefox](#firefox)
+  * [References](#references)
+
+
 
 # Why domain join?
 In a Enterprise environment it is state of the art to have a network that is managed by a domain controller. In Linux it can be a pain to join to a AD domain. In order to make it nearly as convenient as in windows to join the domain, this script has been written.
 # Installation
-Download [here](https://github.com/majojoe/domain_join/releases/download/v1.0.4/domain-join-1.0.4-linux-amd64.deb) and install the \*.deb package provided using the following command:
+Download [here](https://github.com/majojoe/domain_join/releases/download/v1.0.5/domain-join-1.0.5-linux-amd64.deb) and install the \*.deb package provided using the following command:
 ```bash
-sudo apt install ./domain-join-1.0.4-linux-amd64.deb
+sudo apt install ./domain-join-1.0.5-linux-amd64.deb
 ```
 # Join a domain
 Execute the join script as so:
@@ -91,7 +102,7 @@ To enable Kerberos in your Apache configuration open /etc/apache2/sites-availabl
   - network.negotiate-auth.trusted-uris
 
 
-## References:
+## References
 [https://active-directory-wp.com/docs/Networking/Single_Sign_On/Kerberos_SSO_with_Apache_on_Linux.html](https://active-directory-wp.com/docs/Networking/Single_Sign_On/Kerberos_SSO_with_Apache_on_Linux.html)
 [https://serverfault.com/questions/721497/enabling-aes-encrypted-single-sign-on-to-apache-in-a-win2008-domain](https://serverfault.com/questions/721497/enabling-aes-encrypted-single-sign-on-to-apache-in-a-win2008-domain)
 [https://help.ubuntu.com/community/Kerberos](https://help.ubuntu.com/community/Kerberos)

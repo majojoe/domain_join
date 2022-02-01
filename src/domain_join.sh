@@ -24,6 +24,7 @@ TIMEZONE="Europe/Berlin"
 DOMAIN_CONTROLLER=""
 FULLY_QUALIFIED_DN=0
 SDDM_CONF_FILE="/etc/sddm.conf"
+KRB5_CONF="/etc/krb5.conf"
 
 
 
@@ -100,12 +101,11 @@ set_group_policies () {
         fi
 }
 
-# install krb5-user package in order to not get any dialogs presented, since the configuration files must be there, first.
+# configure krb5-user package in order to not get any dialogs presented, since the configuration files must be there, first.
 # first param: domain name
 # second param: admin server (main domain controller)
-install_krb5_package() {
+configure_krb5_package() {
         local KRB5_UNCONF
-        local KRB5_CONF
         local DOMAIN_NAME
         local ADMIN_SERVER
         local DOMAIN_REALM
@@ -113,7 +113,6 @@ install_krb5_package() {
         local REALM_DEFINITION
         
         KRB5_UNCONF="/etc/krb5.conf.unconfigured"
-        KRB5_CONF="/etc/krb5.conf"
         DOMAIN_NAME="${1}"
         ADMIN_SERVER="${2}"
         echo "install krb5-user"
@@ -142,7 +141,11 @@ install_krb5_package() {
                 # domain realm
                 DOMAIN_REALM="        .${DOMAIN_NAME} = ${DOMAIN_UPPER}\n        ${DOMAIN_NAME} = ${DOMAIN_UPPER}"
                 sed -i "s/DOMAIN_REALM/${DOMAIN_REALM}/g" "${KRB5_CONF}"                
-        fi
+        fi        
+}
+
+# install krb5-user package. Configuring of the files belonging to the package must be done first, meaning first to call configure_krb5_package before calling this method.
+install_krb5_package() {
         apt install krb5-user -y
 }
 
@@ -320,6 +323,11 @@ correct_input_method() {
         fi
 }
 
+# activate weak crypto (DES)
+activate_weak_crypto() {
+        sed -i "s/#[[:space:]]*allow_weak_crypto.*/        allow_weak_crypto = true/g" "${KRB5_CONF}"
+}
+
 #find domain controller
 DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
 DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
@@ -342,21 +350,34 @@ set_timeserver "${DOMAIN_CONTROLLER}"
 DOMAIN_CONTROLLER=$(dialog --title "domain controller" --inputbox "Enter the domain controller you want to use for joining the domain. \\nE.g.: srv-dc01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-) 
 # enter domain name
 DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
-FULLY_QUALIFIED_NAMES=$(dialog --single-quoted --backtitle "fully qualified names" --checklist "Choose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option." 10 60 1 'use fully qualified names' "" off 3>&1 1>&2 2>&3 3>&-)        
-if [ -n "${FULLY_QUALIFIED_NAMES}" ]; then
-        FULLY_QUALIFIED_DN=1
-        use_fully_qualified_names
-fi
+DOMAIN_OPTIONS=$(dialog --single-quoted --backtitle "options" --checklist "Fully qualified names:\nChoose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option.\n\nWeak crypto:\nThis option is not recommended, but sometimes needed when connecting to very old Domain Controllers" 20 60 3 'use fully qualified names' "" off 'allow weak crypto' "" off 3>&1 1>&2 2>&3 3>&-)
+
+case "${DOMAIN_OPTIONS}" in
+        *"use fully qualified names"*) 
+        FULLY_QUALIFIED_DN=1;
+        use_fully_qualified_names;
+        ;;
+esac
+
 # choose domain user to use for joining the domain
 JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
 # enter password for join user
 JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
+
+# configure krb5.conf before joining the domain
+configure_krb5_package "${DOMAIN_NAME}" "${DOMAIN_CONTROLLER}"
+case "${DOMAIN_OPTIONS}" in
+        *"allow weak crypto"*) 
+        activate_weak_crypto;
+        ;;
+esac
+
 # join the given domain with the given user
 echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
 
 
 #install krb5-user package 
-install_krb5_package "${DOMAIN_NAME}" "${DOMAIN_CONTROLLER}"
+install_krb5_package
 
 set_group_policies "${JOIN_USER}"
 

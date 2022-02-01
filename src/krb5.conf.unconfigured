@@ -1,6 +1,7 @@
 [libdefaults]
         default_realm = REALM_NAME
         rdns=false
+#       allow_weak_crypto = true
 
 # The following krb5.conf variables are only for MIT Kerberos.
         kdc_timesync = 1
