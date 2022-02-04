@@ -20,7 +20,7 @@ JOIN_USER=""
 JOIN_PASSWORD=""
 DOMAIN_NAME=""
 PAM_MOUNT_FILE="/etc/security/pam_mount.conf.xml"
-
+NSSWITCH_FILE="/etc/nsswitch.conf"
 
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -44,7 +44,25 @@ remove_domain_hosts() {
         fi
 }
 
+# correct nsswitch.conf so that a .local TLD domain can be resolved
+correct_dns_for_local () {
+        if [ -f "${NSSWITCH_FILE}" ]; then
+                sed -i "s/hosts:[[:space:]]*files.*/hosts:          files mdns4_minimal [NOTFOUND=return] dns /g" "${NSSWITCH_FILE}"
+        fi
+}
 
+# check if TLD is .local and if so, correct the nsswitch.conf file so that a resolution of the domain is possible properly
+# first param: domain name
+correct_dns_if_local_TLD () {
+        local DOMAIN_STR
+        local TLD_STR
+        DOMAIN_STR="${1}"
+        TLD_STR="${DOMAIN_STR##*.}"
+        TLD_STR="${TLD_STR,,}"
+        if [ "${TLD_STR}" = "local" ]; then
+                correct_dns_for_local
+        fi
+}
 
 #find domain controller
 DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
@@ -62,6 +80,8 @@ JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Ente
 
 dialog --clear
 clear
+
+correct_dns_if_local_TLD "${DOMAIN_NAME}"
 
 # leave the given domain with the given user
 echo "${JOIN_PASSWORD}" | realm -v leave -U "${JOIN_USER}" "${DOMAIN_NAME}"

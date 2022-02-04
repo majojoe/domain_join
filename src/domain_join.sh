@@ -25,7 +25,7 @@ DOMAIN_CONTROLLER=""
 FULLY_QUALIFIED_DN=0
 SDDM_CONF_FILE="/etc/sddm.conf"
 KRB5_CONF="/etc/krb5.conf"
-
+NSSWITCH_FILE="/etc/nsswitch.conf"
 
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -328,6 +328,26 @@ activate_weak_crypto() {
         sed -i "s/#[[:space:]]*allow_weak_crypto.*/        allow_weak_crypto = true/g" "${KRB5_CONF}"
 }
 
+# correct nsswitch.conf so that a .local TLD domain can be resolved
+correct_dns_for_local () {
+        if [ -f "${NSSWITCH_FILE}" ]; then
+                sed -i "s/hosts:[[:space:]]*files.*/hosts:          files dns mdns4_minimal [NOTFOUND=return] /g" "${NSSWITCH_FILE}"
+        fi
+}
+
+# check if TLD is .local and if so, correct the nsswitch.conf file so that a resolution of the domain is possible properly
+# first param: domain name
+correct_dns_if_local_TLD () {
+        local DOMAIN_STR
+        local TLD_STR
+        DOMAIN_STR="${1}"
+        TLD_STR="${DOMAIN_STR##*.}"
+        TLD_STR="${TLD_STR,,}"
+        if [ "${TLD_STR}" = "local" ]; then
+                correct_dns_for_local
+        fi
+}
+
 #find domain controller
 DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
 DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
@@ -351,6 +371,8 @@ DOMAIN_CONTROLLER=$(dialog --title "domain controller" --inputbox "Enter the dom
 # enter domain name
 DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
 DOMAIN_OPTIONS=$(dialog --single-quoted --backtitle "options" --checklist "Fully qualified names:\nChoose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option.\n\nWeak crypto:\nThis option is not recommended, but sometimes needed when connecting to very old Domain Controllers" 20 60 3 'use fully qualified names' "" off 'allow weak crypto' "" off 3>&1 1>&2 2>&3 3>&-)
+
+correct_dns_if_local_TLD "${DOMAIN_NAME}"
 
 case "${DOMAIN_OPTIONS}" in
         *"use fully qualified names"*) 
