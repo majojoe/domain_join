@@ -8,8 +8,6 @@
   * [Configure browsers](#configure-browsers)
     + [Firefox](#firefox)
   * [References](#references)
-- [Troubleshooting](#troubleshooting)
-  * [.local TLD and Ubuntu 18.04](#local-tld-and-ubuntu-1804)
 
 
 
@@ -109,10 +107,3 @@ To enable Kerberos in your Apache configuration open /etc/apache2/sites-availabl
 [https://serverfault.com/questions/721497/enabling-aes-encrypted-single-sign-on-to-apache-in-a-win2008-domain](https://serverfault.com/questions/721497/enabling-aes-encrypted-single-sign-on-to-apache-in-a-win2008-domain)
 [https://help.ubuntu.com/community/Kerberos](https://help.ubuntu.com/community/Kerberos)
 
-# Troubleshooting
-## .local TLD and Ubuntu 18.04
-Under Ubuntu 18.04 all .local TLD Domains will be handled as if it were mDNS Addresses. Therefore the resolution of domains with a .local TLD will not be resolved in a proper way. To address this issue you can change the line that handles the mDNS and DNS resolution in /etc/nsswitch.conf like this:
-
-```bash
-hosts:          files dns mdns4_minimal [NOTFOUND=return]
-```
