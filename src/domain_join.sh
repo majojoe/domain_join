@@ -23,7 +23,9 @@ DOMAIN_NAME=""
 TIMEZONE="Europe/Berlin"
 DOMAIN_CONTROLLER=""
 FULLY_QUALIFIED_DN=0
-
+SDDM_CONF_FILE="/etc/sddm.conf"
+KRB5_CONF="/etc/krb5.conf"
+NSSWITCH_FILE="/etc/nsswitch.conf"
 
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -99,22 +101,51 @@ set_group_policies () {
         fi
 }
 
-
-# install krb5-user package in order to not get any dialogs presented, since the configuration files must be there, first.
+# configure krb5-user package in order to not get any dialogs presented, since the configuration files must be there, first.
 # first param: domain name
-install_krb5_package() {
+# second param: admin server (main domain controller)
+configure_krb5_package() {
         local KRB5_UNCONF
-        local KRB5_CONF
         local DOMAIN_NAME
+        local ADMIN_SERVER
+        local DOMAIN_REALM
+        local DOMAIN_UPPER
+        local REALM_DEFINITION
         
         KRB5_UNCONF="/etc/krb5.conf.unconfigured"
-        KRB5_CONF="/etc/krb5.conf"
         DOMAIN_NAME="${1}"
+        ADMIN_SERVER="${2}"
         echo "install krb5-user"
         if [ -f "${KRB5_UNCONF}" ]; then
                 cp "${KRB5_UNCONF}" "${KRB5_CONF}"
+                #realm name
                 sed -i "s/REALM_NAME/${DOMAIN_NAME^^}/g" "${KRB5_CONF}"
-        fi
+                
+                #realm definiton
+                DOMAIN_UPPER=${DOMAIN_NAME^^}
+                REALM_DEFINITION="${DOMAIN_UPPER} = {"
+                DC_DNS_LIST=$(nslookup -type=srv _kerberos._tcp."${DOMAIN_NAME}" | grep "${DOMAIN_NAME}" | pcregrep -o1 "(\S+)\.$")
+                DC_LIST=()
+                while IFS= read -r DC; do
+                        DC_LIST+=("${DC}")
+                done <<< "$DC_DNS_LIST"
+
+                for i in "${DC_LIST[@]}"
+                do
+                        REALM_DEFINITION="${REALM_DEFINITION}\n        kdc = $i"
+                done
+                
+                REALM_DEFINITION="${REALM_DEFINITION}\n        admin_server = ${ADMIN_SERVER}\n}"
+                sed -i "s/REALM_DEFINITION/${REALM_DEFINITION}/g" "${KRB5_CONF}"
+                
+                # domain realm
+                DOMAIN_REALM="        .${DOMAIN_NAME} = ${DOMAIN_UPPER}\n        ${DOMAIN_NAME} = ${DOMAIN_UPPER}"
+                sed -i "s/DOMAIN_REALM/${DOMAIN_REALM}/g" "${KRB5_CONF}"                
+        fi        
+}
+
+# install krb5-user package. Configuring of the files belonging to the package must be done first, meaning first to call configure_krb5_package before calling this method.
+install_krb5_package() {
         apt install krb5-user -y
 }
 
@@ -130,6 +161,21 @@ set_domain_realmd() {
         fi
 }
 
+# set the domanin in /etc/hosts
+# first param: domain name
+set_domain_hosts() {
+        local DOMAIN_NAME
+        DOMAIN_NAME="${1}"
+        HOSTS_FILE="/etc/hosts"
+        HOSTNAME_STR=$(hostname)
+        HOSTNAME_ENTRY=$(cat "${HOSTS_FILE}" | grep "127.0.1.1")
+        
+        if [ -f "${HOSTS_FILE}" ]; then     
+                if ! echo "${HOSTNAME_ENTRY}" | grep -q "${DOMAIN_NAME}"; then
+                        sed -i "s/127.0.1.1.*/127.0.1.1       ${HOSTNAME_STR}.${DOMAIN_NAME}  ${HOSTNAME_STR}/g" "${HOSTS_FILE}"
+                fi
+        fi
+}
 
 # set the timeserver to use
 # first param:  domain controller
@@ -220,7 +266,7 @@ set_sudo_users_or_groups() {
         DN="${2}"
         SUDOERS_AD_FILE="/etc/sudoers.d/active_directory"
         DU_SUDO_FILE="/etc/domain_user_for_sudo.conf"
-        PERMITTED_AD_ENTITIES=$(dialog --title "administrative rights for domain users/groups"  --inputbox "Enter the domain users or groups that shall be allowed to gain administrative rights. \\nUsers/groups must be comma separated. \\nGroups must be prepended by a '%' sign.\\nLeave blank if you don't want allow any user/group in the domain to gain administrative rights.\\n " 15 60 "" 3>&1 1>&2 2>&3 3>&-)
+        PERMITTED_AD_ENTITIES=$(dialog --title "administrative rights for domain users/groups"  --inputbox "Enter the domain users or groups that shall be allowed to gain administrative rights. \\nUsers/groups must be comma separated. \\nGroups must be prepended by a '%' sign.\\nLeave blank if you don't want allow any user/group in the domain to gain administrative rights.\\nHint: Some environments like KDE require to give the users with administrative rights here in order for the password popups to work - giving the groups the users are in will not work.\\n " 15 60 "" 3>&1 1>&2 2>&3 3>&-)
 
         clear
 
@@ -261,7 +307,46 @@ set_std_groups_for_domain() {
         fi
 }
 
+# add possibility to login with xrdp when used
+allow_xrdp_login() {
+# add some options to sssd.conf to allow login with xrdp
+        SSSD_CONF_FILE="/etc/sssd/sssd.conf"
+        if [ -f ${SSSD_CONF_FILE} ]; then
+                sed -i '/^\[domain\/.*/a ad_gpo_access_control = enforcing\nad_gpo_map_remote_interactive = +xrdp-sesman' "${SSSD_CONF_FILE}"
+        fi
+}
 
+# remove input method from /etc/sddm.conf file
+correct_input_method() {
+        if [ -f "${SDDM_CONF_FILE}" ]; then
+                sed -i "s/^InputMethod=.*/InputMethod=/g" "${SDDM_CONF_FILE}"
+        fi
+}
+
+# activate weak crypto (DES)
+activate_weak_crypto() {
+        sed -i "s/#[[:space:]]*allow_weak_crypto.*/        allow_weak_crypto = true/g" "${KRB5_CONF}"
+}
+
+# correct nsswitch.conf so that a .local TLD domain can be resolved
+correct_dns_for_local () {
+        if [ -f "${NSSWITCH_FILE}" ]; then
+                sed -i "s/hosts:[[:space:]]*files.*/hosts:          files dns mdns4_minimal [NOTFOUND=return] /g" "${NSSWITCH_FILE}"
+        fi
+}
+
+# check if TLD is .local and if so, correct the nsswitch.conf file so that a resolution of the domain is possible properly
+# first param: domain name
+correct_dns_if_local_TLD () {
+        local DOMAIN_STR
+        local TLD_STR
+        DOMAIN_STR="${1}"
+        TLD_STR="${DOMAIN_STR##*.}"
+        TLD_STR="${TLD_STR,,}"
+        if [ "${TLD_STR}" = "local" ]; then
+                correct_dns_for_local
+        fi
+}
 
 #find domain controller
 DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
@@ -273,6 +358,9 @@ DOMAIN_CONTROLLER="${DNS_SERVER_NAME}"
 #set domain name in realm configuration
 set_domain_realmd "${DOMAIN_NAME}"
 
+#set domain name in /etc/hosts
+set_domain_hosts  "${DOMAIN_NAME}"
+
 #choose the timezone
 choose_timezone
 #set NTP server
@@ -282,21 +370,36 @@ set_timeserver "${DOMAIN_CONTROLLER}"
 DOMAIN_CONTROLLER=$(dialog --title "domain controller" --inputbox "Enter the domain controller you want to use for joining the domain. \\nE.g.: srv-dc01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-) 
 # enter domain name
 DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
-FULLY_QUALIFIED_NAMES=$(dialog --single-quoted --backtitle "fully qualified names" --checklist "Choose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option." 10 60 1 'use fully qualified names' "" off 3>&1 1>&2 2>&3 3>&-)        
-if [ -n "${FULLY_QUALIFIED_NAMES}" ]; then
-        FULLY_QUALIFIED_DN=1
-        use_fully_qualified_names
-fi
+DOMAIN_OPTIONS=$(dialog --single-quoted --backtitle "options" --checklist "Fully qualified names:\nChoose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option.\n\nWeak crypto:\nThis option is not recommended, but sometimes needed when connecting to very old Domain Controllers" 20 60 3 'use fully qualified names' "" off 'allow weak crypto' "" off 3>&1 1>&2 2>&3 3>&-)
+
+correct_dns_if_local_TLD "${DOMAIN_NAME}"
+
+case "${DOMAIN_OPTIONS}" in
+        *"use fully qualified names"*) 
+        FULLY_QUALIFIED_DN=1;
+        use_fully_qualified_names;
+        ;;
+esac
+
 # choose domain user to use for joining the domain
 JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
 # enter password for join user
 JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
+
+# configure krb5.conf before joining the domain
+configure_krb5_package "${DOMAIN_NAME}" "${DOMAIN_CONTROLLER}"
+case "${DOMAIN_OPTIONS}" in
+        *"allow weak crypto"*) 
+        activate_weak_crypto;
+        ;;
+esac
+
 # join the given domain with the given user
 echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
 
 
 #install krb5-user package 
-install_krb5_package "${DOMAIN_NAME}"
+install_krb5_package
 
 set_group_policies "${JOIN_USER}"
 
@@ -312,5 +415,10 @@ configure_shares "${DOMAIN_CONTROLLER}"
 set_sudo_users_or_groups ${FULLY_QUALIFIED_DN} "${DOMAIN_NAME}"
 
 set_std_groups_for_domain 
+
+allow_xrdp_login
+
+#correct input method for sddm - no onscreen keyboard anymore (if sddm is used). 
+correct_input_method
 
 echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFULL #################"
