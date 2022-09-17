@@ -357,6 +357,15 @@ if [ $? -eq 0 ]
 else
         DNS_IP=$(resolvectl status | grep "Current DNS Server" | cut -d ':' -f 2 | tr -d '[:space:]')
 fi
+# check if DNS IP is valid, if not, user can enter it manually
+IP_CHECK=$(echo "${DNS_IP}" | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
+
+if [ -z "${IP_CHECK}" ]; then
+        DNS_IP=$(dialog --title "set DNS Server IP manually"  --inputbox "Unable to determine IP of DNS Server automatically. You can enter it manually. If you leave it empty, script will exit." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
+        if [ -z "${DNS_IP}" ]; then
+                exit 3
+        fi
+fi
 DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
 DNS_SERVER_NAME=${DNS_SERVER_NAME%?}
 DOMAIN_NAME=$(echo "${DNS_SERVER_NAME}" | cut -d '.' -f2-)
