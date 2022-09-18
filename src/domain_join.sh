@@ -242,6 +242,26 @@ configure_shares() {
         fi
 }
 
+# configure available shares for automatic mounting on login
+# first param: domain controller
+configure_file_servers() { 
+        local DOMAIN_CONTROLLER
+        DOMAIN_CONTROLLER="${1}"
+        
+        local AGAIN=1
+        while [ 1 -eq  ${AGAIN} ]
+        do
+                configure_shares "${DOMAIN_CONTROLLER}"
+                dialog --title "Add shares of another fileserver?" --yesno "Do you want to add the shares of another fileserver?" 12 40 
+                AGAIN=$?
+                if [ 0 -eq ${AGAIN} ]; then
+                        AGAIN=1
+                else
+                        AGAIN=0
+                fi
+        done
+}
+
 # configure to use fully qualified names
 use_fully_qualified_names() {
         REALMD_FILE="/etc/realmd.conf"
@@ -435,6 +455,7 @@ do
                         LOOP=1
                 else
                         LOOP=0
+                        exit 3
                 fi
         fi
 done
@@ -451,7 +472,7 @@ echo "${JOIN_PASSWORD}" | kinit "${JOIN_USER}"
 # delete the password of the join user
 JOIN_PASSWORD=""
 
-configure_shares "${DOMAIN_CONTROLLER}"
+configure_file_servers "${DOMAIN_CONTROLLER}"
 
 set_sudo_users_or_groups ${FULLY_QUALIFIED_DN} "${DOMAIN_NAME}"
 
