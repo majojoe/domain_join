@@ -26,7 +26,7 @@ FULLY_QUALIFIED_DN=0
 SDDM_CONF_FILE="/etc/sddm.conf"
 KRB5_CONF="/etc/krb5.conf"
 NSSWITCH_FILE="/etc/nsswitch.conf"
-
+DNS_IP=""
 
 if [ "$(id -u)" -ne 0 ]; then
         echo "This script must be run as root in order to join to the given domain. Exiting..."
@@ -348,24 +348,34 @@ correct_dns_if_local_TLD () {
         fi
 }
 
-#find domain controller
-set +e
-systemd-resolve --status &> /dev/null
-set -e
-if [ $? -eq 0 ]
-        DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | cut -d ' ' -f 2 | tr -d '[:space:]')
-else
-        DNS_IP=$(resolvectl status | grep "Current DNS Server" | cut -d ':' -f 2 | tr -d '[:space:]')
-fi
-# check if DNS IP is valid, if not, user can enter it manually
-IP_CHECK=$(echo "${DNS_IP}" | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
-
-if [ -z "${IP_CHECK}" ]; then
-        DNS_IP=$(dialog --title "set DNS Server IP manually"  --inputbox "Unable to determine IP of DNS Server automatically. You can enter it manually. If you leave it empty, script will exit." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
-        if [ -z "${DNS_IP}" ]; then
-                exit 3
+# try to find domain controller automatically
+find_domain_controller () {
+        local DNS
+        local IP_CHECK
+        
+        set +e
+        systemd-resolve --status &> /dev/null
+        set -e
+        if [ $? -eq 0 ]
+                DNS=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | cut -d ' ' -f 2 | tr -d '[:space:]')
+        else
+                DNS=$(resolvectl status | grep "Current DNS Server" | cut -d ':' -f 2 | tr -d '[:space:]')
         fi
-fi
+        # check if DNS IP is valid, if not, user can enter it manually
+        IP_CHECK=$(echo "${DNS}" | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
+
+        if [ -z "${IP_CHECK}" ]; then
+                DNS=$(dialog --title "set DNS Server IP manually"  --inputbox "Unable to determine IP of DNS Server automatically. You can enter it manually. If you leave it empty, script will exit." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
+                if [ -z "${DNS}" ]; then
+                        exit 3
+                fi
+        fi
+        DNS_IP="${DNS}"
+}
+
+
+#find domain controller
+find_domain_controller
 DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
 DNS_SERVER_NAME=${DNS_SERVER_NAME%?}
 DOMAIN_NAME=$(echo "${DNS_SERVER_NAME}" | cut -d '.' -f2-)
@@ -397,11 +407,6 @@ case "${DOMAIN_OPTIONS}" in
         ;;
 esac
 
-# choose domain user to use for joining the domain
-JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
-# enter password for join user
-JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
-
 # configure krb5.conf before joining the domain
 configure_krb5_package "${DOMAIN_NAME}" "${DOMAIN_CONTROLLER}"
 case "${DOMAIN_OPTIONS}" in
@@ -410,9 +415,29 @@ case "${DOMAIN_OPTIONS}" in
         ;;
 esac
 
-# join the given domain with the given user
-echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
+LOOP=1
+TRY_AGAIN=0
+while [ 1 -eq  ${LOOP} ]
+do
+        # choose domain user to use for joining the domain
+        JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
+        # enter password for join user
+        JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
 
+        # join the given domain with the given user
+        echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
+        
+        if [ 1 -ne ${?} ]; then
+                dialog --title "Domain join failed!" --yesno "Do you want to reenter user and password?" 12 40 
+                TRY_AGAIN=$?
+
+                if [ 0 -eq ${TRY_AGAIN} ]; then
+                        LOOP=1
+                else
+                        LOOP=0
+                fi
+        fi
+done
 
 #install krb5-user package 
 install_krb5_package
