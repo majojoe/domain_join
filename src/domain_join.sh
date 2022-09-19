@@ -215,6 +215,12 @@ configure_shares() {
 
 
         if [ -n "${DRIVE_LIST}" ]; then
+                dialog --title "Add options for this fileserver?" --defaultno --yesno "Do you want to add options for this fileserver (e.g. vers=2.0)?" 12 40 
+                ADD_OPTIONS=$?
+                if [ 0 -eq ${ADD_OPTIONS} ]; then
+                        FILESERVER_OPTIONS=$(dialog --title "fileserver options"  --inputbox "Enter the additional fileserver options for the current fileserver (give them with commas if more than one option is provided. e.g. vers=2.0,guest)." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
+                fi        
+        
                 for i in ${DRIVE_LIST}; do
                         MNT_POINT=$(echo "${i}" | tr -d '$')
                         CHECKLIST+=("${i} /media/\$USER/${MNT_POINT} off ")
@@ -229,7 +235,7 @@ configure_shares() {
                 for i in ${DRIVE_LIST}; do
                         i=$(echo "${i}" | tr -d "'")
                         MNT_POINT=$(echo "${i}" | tr -d '$')
-                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev\" uid=\"5000-999999999\""
+                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev,${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
                         if [ -f "${PAM_MOUNT_FILE}" ]; then
                                 xmlstarlet ed --inplace -s '/pam_mount' -t elem -n "${MOUNT_STR}" "${PAM_MOUNT_FILE}"
                         else
