@@ -252,7 +252,7 @@ configure_file_servers() {
         while [ 1 -eq  ${AGAIN} ]
         do
                 configure_shares "${DOMAIN_CONTROLLER}"
-                dialog --title "Add shares of another fileserver?" --yesno "Do you want to add the shares of another fileserver?" 12 40 
+                dialog --title "Add shares of another fileserver?" --defaultno --yesno "Do you want to add the shares of another fileserver?" 12 40 
                 AGAIN=$?
                 if [ 0 -eq ${AGAIN} ]; then
                         AGAIN=1
