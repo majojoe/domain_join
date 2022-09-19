@@ -168,7 +168,7 @@ set_domain_hosts() {
         DOMAIN_NAME="${1}"
         HOSTS_FILE="/etc/hosts"
         HOSTNAME_STR=$(hostname)
-        HOSTNAME_ENTRY=$(cat "${HOSTS_FILE}" | grep "127.0.1.1")
+        HOSTNAME_ENTRY=$(grep "127.0.1.1" "${HOSTS_FILE}")
         
         if [ -f "${HOSTS_FILE}" ]; then     
                 if ! echo "${HOSTNAME_ENTRY}" | grep -q "${DOMAIN_NAME}"; then
@@ -381,8 +381,9 @@ find_domain_controller () {
         
         set +e
         systemd-resolve --status &> /dev/null
+        RESOLVE_STATUS=$?
         set -e
-        if [ $? -eq 0 ]
+        if [ $RESOLVE_STATUS -eq 0 ]; then
                 DNS=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | cut -d ' ' -f 2 | tr -d '[:space:]')
         else
                 DNS=$(resolvectl status | grep "Current DNS Server" | cut -d ':' -f 2 | tr -d '[:space:]')
