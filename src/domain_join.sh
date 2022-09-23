@@ -215,8 +215,10 @@ configure_shares() {
 
 
         if [ -n "${DRIVE_LIST}" ]; then
+                set +e
                 dialog --title "Add options for this fileserver?" --defaultno --yesno "Do you want to add options for this fileserver (e.g. vers=2.0)?" 12 40 
                 ADD_OPTIONS=$?
+                set -e
                 if [ 0 -eq ${ADD_OPTIONS} ]; then
                         FILESERVER_OPTIONS=$(dialog --title "fileserver options"  --inputbox "Enter the additional fileserver options for the current fileserver (give them with commas if more than one option is provided. e.g. vers=2.0,guest)." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
                 fi        
@@ -258,8 +260,10 @@ configure_file_servers() {
         while [ 1 -eq  ${AGAIN} ]
         do
                 configure_shares "${DOMAIN_CONTROLLER}"
+                set +e
                 dialog --title "Add shares of another fileserver?" --defaultno --yesno "Do you want to add the shares of another fileserver?" 12 40 
                 AGAIN=$?
+                set -e
                 if [ 0 -eq ${AGAIN} ]; then
                         AGAIN=1
                 else
@@ -400,6 +404,42 @@ find_domain_controller () {
         DNS_IP="${DNS}"
 }
 
+# join the given domain 
+# first param: domain name
+join_domain () {
+        local DOMAIN_NAME
+        local LOOP
+        local DOMAIN_JOIN_RESULT
+        local TRY_AGAIN
+        DOMAIN_NAME="${1}"
+        LOOP=1
+        while [ 1 -eq  ${LOOP} ]
+        do
+                # choose domain user to use for joining the domain
+                JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
+                # enter password for join user
+                JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
+
+                # join the given domain with the given user
+                set +e
+                echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"                
+                DOMAIN_JOIN_RESULT=$?                
+                set -e
+                if [ 0 -ne ${DOMAIN_JOIN_RESULT} ]; then
+                        dialog --title "Domain join failed!" --yesno "Do you want to reenter user and password?" 12 40 
+                        TRY_AGAIN=$?
+                        if [ 0 -eq ${TRY_AGAIN} ]; then
+                                LOOP=1
+                        else
+                                LOOP=0
+                                exit 3
+                        fi
+                else
+                        LOOP=0
+                fi
+        done        
+}
+
 
 #find domain controller
 find_domain_controller
@@ -442,30 +482,8 @@ case "${DOMAIN_OPTIONS}" in
         ;;
 esac
 
-LOOP=1
-TRY_AGAIN=0
-while [ 1 -eq  ${LOOP} ]
-do
-        # choose domain user to use for joining the domain
-        JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
-        # enter password for join user
-        JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
-
-        # join the given domain with the given user
-        echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
-        
-        if [ 1 -ne ${?} ]; then
-                dialog --title "Domain join failed!" --yesno "Do you want to reenter user and password?" 12 40 
-                TRY_AGAIN=$?
-
-                if [ 0 -eq ${TRY_AGAIN} ]; then
-                        LOOP=1
-                else
-                        LOOP=0
-                        exit 3
-                fi
-        fi
-done
+#join the domain now
+join_domain "${DOMAIN_NAME}"
 
 #install krb5-user package 
 install_krb5_package
