@@ -356,6 +356,9 @@ correct_input_method() {
 # activate weak crypto (DES)
 activate_weak_crypto() {
         sed -i "s/#[[:space:]]*allow_weak_crypto.*/        allow_weak_crypto = true/g" "${KRB5_CONF}"
+        sed -i "s/#[[:space:]]*default_tgs_enctypes.*/        default_tgs_enctypes = aes256-cts-hmac-sha1-96 rc4-hmac des-cbc-crc des-cbc-md5/g" "${KRB5_CONF}"
+        sed -i "s/#[[:space:]]*default_tkt_enctypes.*/        default_tkt_enctypes = aes256-cts-hmac-sha1-96 rc4-hmac des-cbc-crc des-cbc-md5/g" "${KRB5_CONF}"
+        sed -i "s/#[[:space:]]*permitted_enctypes.*/        permitted_enctypes = aes256-cts-hmac-sha1-96 rc4-hmac des-cbc-crc des-cbc-md5/g" "${KRB5_CONF}"
 }
 
 # correct nsswitch.conf so that a .local TLD domain can be resolved
