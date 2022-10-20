@@ -26,7 +26,7 @@ FULLY_QUALIFIED_DN=0
 SDDM_CONF_FILE="/etc/sddm.conf"
 KRB5_CONF="/etc/krb5.conf"
 NSSWITCH_FILE="/etc/nsswitch.conf"
-
+DNS_IP=""
 
 if [ "$(id -u)" -ne 0 ]; then
         echo "This script must be run as root in order to join to the given domain. Exiting..."
@@ -168,7 +168,7 @@ set_domain_hosts() {
         DOMAIN_NAME="${1}"
         HOSTS_FILE="/etc/hosts"
         HOSTNAME_STR=$(hostname)
-        HOSTNAME_ENTRY=$(cat "${HOSTS_FILE}" | grep "127.0.1.1")
+        HOSTNAME_ENTRY=$(grep "127.0.1.1" "${HOSTS_FILE}")
         
         if [ -f "${HOSTS_FILE}" ]; then     
                 if ! echo "${HOSTNAME_ENTRY}" | grep -q "${DOMAIN_NAME}"; then
@@ -215,6 +215,14 @@ configure_shares() {
 
 
         if [ -n "${DRIVE_LIST}" ]; then
+                set +e
+                dialog --title "Add options for this fileserver?" --defaultno --yesno "Do you want to add options for this fileserver (e.g. vers=2.0)?" 12 40 
+                ADD_OPTIONS=$?
+                set -e
+                if [ 0 -eq ${ADD_OPTIONS} ]; then
+                        FILESERVER_OPTIONS=$(dialog --title "fileserver options"  --inputbox "Enter the additional fileserver options for the current fileserver (give them with commas if more than one option is provided. e.g. vers=2.0,guest)." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
+                fi        
+        
                 for i in ${DRIVE_LIST}; do
                         MNT_POINT=$(echo "${i}" | tr -d '$')
                         CHECKLIST+=("${i} /media/\$USER/${MNT_POINT} off ")
@@ -229,7 +237,7 @@ configure_shares() {
                 for i in ${DRIVE_LIST}; do
                         i=$(echo "${i}" | tr -d "'")
                         MNT_POINT=$(echo "${i}" | tr -d '$')
-                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev\" uid=\"5000-999999999\""
+                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev,${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
                         if [ -f "${PAM_MOUNT_FILE}" ]; then
                                 xmlstarlet ed --inplace -s '/pam_mount' -t elem -n "${MOUNT_STR}" "${PAM_MOUNT_FILE}"
                         else
@@ -240,6 +248,28 @@ configure_shares() {
         else
                 dialog --msgbox "No Drives found for given fileserver ${FILE_SERVER}" 5 40 3>&1 1>&2 2>&3 3>&-
         fi
+}
+
+# configure available shares for automatic mounting on login
+# first param: domain controller
+configure_file_servers() { 
+        local DOMAIN_CONTROLLER
+        DOMAIN_CONTROLLER="${1}"
+        
+        local AGAIN=1
+        while [ 1 -eq  ${AGAIN} ]
+        do
+                configure_shares "${DOMAIN_CONTROLLER}"
+                set +e
+                dialog --title "Add shares of another fileserver?" --defaultno --yesno "Do you want to add the shares of another fileserver?" 12 40 
+                AGAIN=$?
+                set -e
+                if [ 0 -eq ${AGAIN} ]; then
+                        AGAIN=1
+                else
+                        AGAIN=0
+                fi
+        done
 }
 
 # configure to use fully qualified names
@@ -326,6 +356,9 @@ correct_input_method() {
 # activate weak crypto (DES)
 activate_weak_crypto() {
         sed -i "s/#[[:space:]]*allow_weak_crypto.*/        allow_weak_crypto = true/g" "${KRB5_CONF}"
+        sed -i "s/#[[:space:]]*default_tgs_enctypes.*/        default_tgs_enctypes = aes256-cts-hmac-sha1-96 rc4-hmac des-cbc-crc des-cbc-md5/g" "${KRB5_CONF}"
+        sed -i "s/#[[:space:]]*default_tkt_enctypes.*/        default_tkt_enctypes = aes256-cts-hmac-sha1-96 rc4-hmac des-cbc-crc des-cbc-md5/g" "${KRB5_CONF}"
+        sed -i "s/#[[:space:]]*permitted_enctypes.*/        permitted_enctypes = aes256-cts-hmac-sha1-96 rc4-hmac des-cbc-crc des-cbc-md5/g" "${KRB5_CONF}"
 }
 
 # correct nsswitch.conf so that a .local TLD domain can be resolved
@@ -348,8 +381,71 @@ correct_dns_if_local_TLD () {
         fi
 }
 
+# try to find domain controller automatically
+find_domain_controller () {
+        local DNS
+        local IP_CHECK
+        
+        set +e
+        systemd-resolve --status &> /dev/null
+        RESOLVE_STATUS=$?
+        set -e
+        if [ $RESOLVE_STATUS -eq 0 ]; then
+                DNS=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | cut -d ' ' -f 2 | tr -d '[:space:]')
+        else
+                DNS=$(resolvectl status | grep "Current DNS Server" | cut -d ':' -f 2 | tr -d '[:space:]')
+        fi
+        # check if DNS IP is valid, if not, user can enter it manually
+        IP_CHECK=$(echo "${DNS}" | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
+
+        if [ -z "${IP_CHECK}" ]; then
+                DNS=$(dialog --title "set DNS Server IP manually"  --inputbox "Unable to determine IP of DNS Server automatically. You can enter it manually. If you leave it empty, script will exit." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
+                if [ -z "${DNS}" ]; then
+                        exit 3
+                fi
+        fi
+        DNS_IP="${DNS}"
+}
+
+# join the given domain 
+# first param: domain name
+join_domain () {
+        local DOMAIN_NAME
+        local LOOP
+        local DOMAIN_JOIN_RESULT
+        local TRY_AGAIN
+        DOMAIN_NAME="${1}"
+        LOOP=1
+        while [ 1 -eq  ${LOOP} ]
+        do
+                # choose domain user to use for joining the domain
+                JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
+                # enter password for join user
+                JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
+
+                # join the given domain with the given user
+                set +e
+                echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"                
+                DOMAIN_JOIN_RESULT=$?                
+                set -e
+                if [ 0 -ne ${DOMAIN_JOIN_RESULT} ]; then
+                        dialog --title "Domain join failed!" --yesno "Do you want to reenter user and password?" 12 40 
+                        TRY_AGAIN=$?
+                        if [ 0 -eq ${TRY_AGAIN} ]; then
+                                LOOP=1
+                        else
+                                LOOP=0
+                                exit 3
+                        fi
+                else
+                        LOOP=0
+                fi
+        done        
+}
+
+
 #find domain controller
-DNS_IP=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | tr -d '[:space:]')
+find_domain_controller
 DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
 DNS_SERVER_NAME=${DNS_SERVER_NAME%?}
 DOMAIN_NAME=$(echo "${DNS_SERVER_NAME}" | cut -d '.' -f2-)
@@ -381,11 +477,6 @@ case "${DOMAIN_OPTIONS}" in
         ;;
 esac
 
-# choose domain user to use for joining the domain
-JOIN_USER=$(dialog --title "User for domain join" --inputbox "Enter the user to use for the domain join" 10 30 "Administrator" 3>&1 1>&2 2>&3 3>&-)
-# enter password for join user
-JOIN_PASSWORD=$(dialog --title "Password" --clear --insecure --passwordbox "Enter your password for user ${JOIN_USER}" 10 30 "" 3>&1 1>&2 2>&3 3>&-)
-
 # configure krb5.conf before joining the domain
 configure_krb5_package "${DOMAIN_NAME}" "${DOMAIN_CONTROLLER}"
 case "${DOMAIN_OPTIONS}" in
@@ -394,9 +485,8 @@ case "${DOMAIN_OPTIONS}" in
         ;;
 esac
 
-# join the given domain with the given user
-echo "${JOIN_PASSWORD}" | realm -v join -U "${JOIN_USER}" "${DOMAIN_NAME}"
-
+#join the domain now
+join_domain "${DOMAIN_NAME}"
 
 #install krb5-user package 
 install_krb5_package
@@ -410,7 +500,7 @@ echo "${JOIN_PASSWORD}" | kinit "${JOIN_USER}"
 # delete the password of the join user
 JOIN_PASSWORD=""
 
-configure_shares "${DOMAIN_CONTROLLER}"
+configure_file_servers "${DOMAIN_CONTROLLER}"
 
 set_sudo_users_or_groups ${FULLY_QUALIFIED_DN} "${DOMAIN_NAME}"
 

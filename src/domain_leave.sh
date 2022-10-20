@@ -103,7 +103,9 @@ DU_SUDO_FILE=/etc/domain_user_for_sudo.conf
 if [ -f "${DU_SUDO_FILE}" ]; then
         while read -r username 
         do 
+                set +e
                 gpasswd -d "${username}" sudo
+                set -e
         done < "${DU_SUDO_FILE}"
 fi
 
