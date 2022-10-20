@@ -2,12 +2,3 @@
 
 echo "disable mkhomedir"
 pam-auth-update --remove dj_mkhomedir
-PAM_MOUNT_FILE="/etc/security/pam_mount.conf.xml"
-echo "remove all cifs mounts from ${PAM_MOUNT_FILE}"
-xmlstarlet ed --inplace -d "//volume[@fstype=\"cifs\"]" "${PAM_MOUNT_FILE}"
-
-#remove sssd.conf since there are problems when not doing so after one has executed "realmd leave"
-SSSD_CONF_FILE="/etc/sssd/sssd.conf"
-if [ -f ${SSSD_CONF_FILE} ]; then
-        rm "${SSSD_CONF_FILE}"
-fi
