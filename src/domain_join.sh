@@ -207,11 +207,13 @@ configure_shares() {
         local PAM_MOUNT_FILE
         local MOUNT_STR
         local FILE_SERVER
+        local CHECKLIST
         
         PAM_MOUNT_FILE="/etc/security/pam_mount.conf.xml"
         DOMAIN_CONTROLLER="${1}"
         FILE_SERVER=$(dialog --title "fileserver" --inputbox "Enter the fileserver to use for mounting of drives when a user logs in. \\nE.g.: srv-file01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-) 
         DRIVE_LIST=$(smbclient -k -N  -U "${JOIN_USER}" -L "${FILE_SERVER}" 2> /dev/null | grep Disk  | grep -v -E "ADMIN\\$|SYSVOL|NETLOGON" | cut -d " " -f 1 | grep -E "[a-zA-Z0-9]{2,}(\\$)*" | tr -d '\t')
+        CHECKLIST=""
 
 
         if [ -n "${DRIVE_LIST}" ]; then
@@ -230,7 +232,7 @@ configure_shares() {
                 
                 
                 # shellcheck disable=SC2068
-                DRIVE_LIST=$(dialog --single-quoted --backtitle "Choose Drives to mount" --checklist "Choose which drives shall be mounted when a user logs in..." 10 60 ${#CHECKLIST[@]} ${CHECKLIST[@]} 3>&1 1>&2 2>&3 3>&-)        
+                DRIVE_LIST=$(dialog --single-quoted --backtitle "Choose Drives to mount" --checklist "Choose which drives shall be mounted when a user logs in..." 20 60 ${#CHECKLIST[@]} ${CHECKLIST[@]} 3>&1 1>&2 2>&3 3>&-)        
                 dialog --clear
                 clear
 
