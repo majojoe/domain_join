@@ -186,7 +186,7 @@ set_timeserver() {
         DOMAIN_CONTROLLER="${1}"
         
         echo "set timeserver"
-        NTP_SERVER=$(dialog --title "NTP server" --inputbox "Enter the NTP server (domain controller) you want to use. \\nE.g.: srv-dc01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-)
+        NTP_SERVER="${DOMAIN_CONTROLLER}"
         TIMESYNCD_FILE="/etc/systemd/timesyncd.conf"
         if grep -q "#[[:space:]]*NTP" "$TIMESYNCD_FILE"; then
                 # if NTP is commented out
@@ -296,7 +296,7 @@ set_sudo_users_or_groups() {
         local DU_SUDO_FILE
         FQDN=$1
         DN="${2}"
-        SUDOERS_AD_FILE="/etc/sudoers.d/active_directory"
+        SUDOERS_AD_FILE="/etc/sudoers.d/50-active_directory"
         DU_SUDO_FILE="/etc/domain_user_for_sudo.conf"
         PERMITTED_AD_ENTITIES=$(dialog --title "administrative rights for domain users/groups"  --inputbox "Enter the domain users or groups that shall be allowed to gain administrative rights. \\nUsers/groups must be comma separated. \\nGroups must be prepended by a '%' sign.\\nLeave blank if you don't want allow any user/group in the domain to gain administrative rights.\\nHint: Some environments like KDE require to give the users with administrative rights here in order for the password popups to work - giving the groups the users are in will not work.\\n " 15 60 "" 3>&1 1>&2 2>&3 3>&-)
 
@@ -355,14 +355,6 @@ correct_input_method() {
         fi
 }
 
-# activate weak crypto (DES)
-activate_weak_crypto() {
-        sed -i "s/#[[:space:]]*allow_weak_crypto.*/        allow_weak_crypto = true/g" "${KRB5_CONF}"
-        sed -i "s/#[[:space:]]*default_tgs_enctypes.*/        default_tgs_enctypes = aes256-cts-hmac-sha1-96 rc4-hmac des-cbc-crc des-cbc-md5/g" "${KRB5_CONF}"
-        sed -i "s/#[[:space:]]*default_tkt_enctypes.*/        default_tkt_enctypes = aes256-cts-hmac-sha1-96 rc4-hmac des-cbc-crc des-cbc-md5/g" "${KRB5_CONF}"
-        sed -i "s/#[[:space:]]*permitted_enctypes.*/        permitted_enctypes = aes256-cts-hmac-sha1-96 rc4-hmac des-cbc-crc des-cbc-md5/g" "${KRB5_CONF}"
-}
-
 # correct nsswitch.conf so that a .local TLD domain can be resolved
 correct_dns_for_local () {
         if [ -f "${NSSWITCH_FILE}" ]; then
@@ -387,16 +379,11 @@ correct_dns_if_local_TLD () {
 find_domain_controller () {
         local DNS
         local IP_CHECK
+        local DOMAIN_NAME
+        DOMAIN_NAME="${1}"
         
-        set +e
-        systemd-resolve --status &> /dev/null
-        RESOLVE_STATUS=$?
-        set -e
-        if [ $RESOLVE_STATUS -eq 0 ]; then
-                DNS=$(systemd-resolve --status | grep "DNS Servers" | cut -d ':' -f 2 | cut -d ' ' -f 2 | tr -d '[:space:]')
-        else
-                DNS=$(resolvectl status | grep "Current DNS Server" | cut -d ':' -f 2 | tr -d '[:space:]')
-        fi
+        DNS=$(nslookup -type=srv _ldap._tcp.pdc._msdcs."${DOMAIN_NAME}" | grep "internet address" | cut -d"=" -f 2 |  tr -d '[:space:]')
+        
         # check if DNS IP is valid, if not, user can enter it manually
         IP_CHECK=$(echo "${DNS}" | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
 
@@ -445,9 +432,11 @@ join_domain () {
         done        
 }
 
+# enter domain name
+DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
 
 #find domain controller
-find_domain_controller
+find_domain_controller "${DOMAIN_NAME}"
 DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
 DNS_SERVER_NAME=${DNS_SERVER_NAME%?}
 DOMAIN_NAME=$(echo "${DNS_SERVER_NAME}" | cut -d '.' -f2-)
@@ -459,16 +448,10 @@ set_domain_realmd "${DOMAIN_NAME}"
 #set domain name in /etc/hosts
 set_domain_hosts  "${DOMAIN_NAME}"
 
-#choose the timezone
-choose_timezone
 #set NTP server
 set_timeserver "${DOMAIN_CONTROLLER}"
 
-# enter domain controller
-DOMAIN_CONTROLLER=$(dialog --title "domain controller" --inputbox "Enter the domain controller you want to use for joining the domain. \\nE.g.: srv-dc01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-) 
-# enter domain name
-DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
-DOMAIN_OPTIONS=$(dialog --single-quoted --backtitle "options" --checklist "Fully qualified names:\nChoose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option.\n\nWeak crypto:\nThis option is not recommended, but sometimes needed when connecting to very old Domain Controllers" 20 60 3 'use fully qualified names' "" off 'allow weak crypto' "" off 3>&1 1>&2 2>&3 3>&-)
+DOMAIN_OPTIONS=$(dialog --single-quoted --backtitle "options" --checklist "Fully qualified names:\nChoose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option.\n" 20 60 3 'use fully qualified names' "" off 3>&1 1>&2 2>&3 3>&-)
 
 correct_dns_if_local_TLD "${DOMAIN_NAME}"
 
@@ -481,19 +464,13 @@ esac
 
 # configure krb5.conf before joining the domain
 configure_krb5_package "${DOMAIN_NAME}" "${DOMAIN_CONTROLLER}"
-case "${DOMAIN_OPTIONS}" in
-        *"allow weak crypto"*) 
-        activate_weak_crypto;
-        ;;
-esac
+
 
 #join the domain now
 join_domain "${DOMAIN_NAME}"
 
 #install krb5-user package 
 install_krb5_package
-
-set_group_policies "${JOIN_USER}"
 
 systemctl restart sssd
 
