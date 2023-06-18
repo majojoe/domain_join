@@ -1,0 +1,2 @@
+Find primary domain controller 
+https://www.thehacker.recipes/ad/recon/dns 
