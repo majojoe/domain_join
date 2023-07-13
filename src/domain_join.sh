@@ -27,6 +27,7 @@ SDDM_CONF_FILE="/etc/sddm.conf"
 KRB5_CONF="/etc/krb5.conf"
 NSSWITCH_FILE="/etc/nsswitch.conf"
 DNS_IP=""
+NTP_SERVERS=""
 
 if [ "$(id -u)" -ne 0 ]; then
         echo "This script must be run as root in order to join to the given domain. Exiting..."
@@ -144,6 +145,32 @@ configure_krb5_package() {
         fi        
 }
 
+# find all domain controllers in the domain used and set them all as redundant ntp servers
+# first param: domain name
+find_ntp_servers() {
+        local DOMAIN_NAME
+        local NTP_SERVERS_LIST
+        local DOMAIN_UPPER
+        
+        DOMAIN_NAME="${1}"
+        NTP_SERVERS_LIST=""
+        
+        #realm definiton
+        DOMAIN_UPPER=${DOMAIN_NAME^^}
+        DC_DNS_LIST=$(nslookup -type=srv _kerberos._tcp."${DOMAIN_NAME}" | grep "${DOMAIN_NAME}" | pcregrep -o1 "(\S+)\.$")
+        DC_LIST=()
+        while IFS= read -r DC; do
+                DC_LIST+=("${DC}")
+        done <<< "$DC_DNS_LIST"
+
+        for i in "${DC_LIST[@]}"
+        do
+                NTP_SERVERS_LIST="${NTP_SERVERS_LIST} $i"
+        done        
+        NTP_SERVERS_LIST="${NTP_SERVERS_LIST##' '}"
+        NTP_SERVERS="${NTP_SERVERS_LIST}"        
+}
+
 # install krb5-user package. Configuring of the files belonging to the package must be done first, meaning first to call configure_krb5_package before calling this method.
 install_krb5_package() {
         apt install krb5-user -y
@@ -178,7 +205,7 @@ set_domain_hosts() {
 }
 
 # set the timeserver to use
-# first param:  domain controller
+# first param:  list with ntp servers 
 set_timeserver() {
         local NTP_SERVER
         local DOMAIN_CONTROLLER
@@ -186,7 +213,6 @@ set_timeserver() {
         DOMAIN_CONTROLLER="${1}"
         
         echo "set timeserver"
-        NTP_SERVER="${DOMAIN_CONTROLLER}"
         TIMESYNCD_FILE="/etc/systemd/timesyncd.conf"
         if grep -q "#[[:space:]]*NTP" "$TIMESYNCD_FILE"; then
                 # if NTP is commented out
@@ -449,7 +475,7 @@ set_domain_realmd "${DOMAIN_NAME}"
 set_domain_hosts  "${DOMAIN_NAME}"
 
 #set NTP server
-set_timeserver "${DOMAIN_CONTROLLER}"
+set_timeserver "${NTP_SERVERS}"
 
 DOMAIN_OPTIONS=$(dialog --single-quoted --backtitle "options" --checklist "Fully qualified names:\nChoose if to use fully qualified names: users will be of the form user@domain, not just user. If you have more than one domain in your forrest or any trust relationship, then choose this option.\n" 20 60 3 'use fully qualified names' "" off 3>&1 1>&2 2>&3 3>&-)
 
