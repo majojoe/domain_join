@@ -14,7 +14,7 @@ install(FILES README.md DESTINATION /usr/share/doc/domain_join/ )
 
 set(CPACK_PACKAGE_NAME "domain-join")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "meta package that automates domain join for ubuntu systems")
-set(CPACK_PACKAGE_VERSION "1.0.9")
+set(CPACK_PACKAGE_VERSION "1.0.10")
 set(SYSTEM_ARCH "all")
 
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "realmd,sssd,sssd-tools,samba-common,packagekit,samba-common-bin,samba-libs,adcli,cifs-utils,libpam-mount,libpam-ccreds,findutils,dialog,libpam-sss,coreutils,xmlstarlet,smbclient,pcregrep")
