@@ -208,9 +208,9 @@ set_domain_hosts() {
 # first param:  list with ntp servers 
 set_timeserver() {
         local NTP_SERVER
-        local DOMAIN_CONTROLLER
+        local DOMAIN_CONTROLLERS
         
-        DOMAIN_CONTROLLER="${1}"
+        DOMAIN_CONTROLLERS="${1}"
         
         echo "set timeserver"
         TIMESYNCD_FILE="/etc/systemd/timesyncd.conf"
@@ -218,7 +218,7 @@ set_timeserver() {
                 # if NTP is commented out
                 sed -i "s/#[[:space:]]*NTP=/NTP=/g" "$TIMESYNCD_FILE"
         fi
-        sed -i "s/^NTP=.*/NTP=${NTP_SERVER}/g" "$TIMESYNCD_FILE"
+        sed -i "s/^NTP=.*/NTP=${DOMAIN_CONTROLLERS}/g" "$TIMESYNCD_FILE"
 
         systemctl restart systemd-timesyncd.service
 }
@@ -463,6 +463,7 @@ DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you
 
 #find domain controller
 find_domain_controller "${DOMAIN_NAME}"
+find_ntp_servers  "${DOMAIN_NAME}"
 DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
 DNS_SERVER_NAME=${DNS_SERVER_NAME%?}
 DOMAIN_NAME=$(echo "${DNS_SERVER_NAME}" | cut -d '.' -f2-)
