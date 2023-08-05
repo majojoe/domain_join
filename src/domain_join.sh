@@ -116,7 +116,6 @@ configure_krb5_package() {
         KRB5_UNCONF="/etc/krb5.conf.unconfigured"
         DOMAIN_NAME="${1}"
         ADMIN_SERVER="${2}"
-        echo "install krb5-user"
         if [ -f "${KRB5_UNCONF}" ]; then
                 cp "${KRB5_UNCONF}" "${KRB5_CONF}"
                 #realm name
@@ -124,19 +123,8 @@ configure_krb5_package() {
                 
                 #realm definiton
                 DOMAIN_UPPER=${DOMAIN_NAME^^}
-                REALM_DEFINITION="${DOMAIN_UPPER} = {"
-                DC_DNS_LIST=$(nslookup -type=srv _kerberos._tcp."${DOMAIN_NAME}" | grep "${DOMAIN_NAME}" | pcregrep -o1 "(\S+)\.$")
-                DC_LIST=()
-                while IFS= read -r DC; do
-                        DC_LIST+=("${DC}")
-                done <<< "$DC_DNS_LIST"
-
-                for i in "${DC_LIST[@]}"
-                do
-                        REALM_DEFINITION="${REALM_DEFINITION}\n        kdc = $i"
-                done
-                
-                REALM_DEFINITION="${REALM_DEFINITION}\n        admin_server = ${ADMIN_SERVER}\n}"
+                REALM_DEFINITION="${DOMAIN_UPPER} = {\n"                
+                REALM_DEFINITION="${REALM_DEFINITION}        admin_server = ${ADMIN_SERVER}\n}"
                 sed -i "s/REALM_DEFINITION/${REALM_DEFINITION}/g" "${KRB5_CONF}"
                 
                 # domain realm
@@ -265,7 +253,7 @@ configure_shares() {
                 for i in ${DRIVE_LIST}; do
                         i=$(echo "${i}" | tr -d "'")
                         MNT_POINT=$(echo "${i}" | tr -d '$')
-                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev,${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
+                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev,sec=krb5i,cruid=%(USERUID),${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
                         if [ -f "${PAM_MOUNT_FILE}" ]; then
                                 xmlstarlet ed --inplace -s '/pam_mount' -t elem -n "${MOUNT_STR}" "${PAM_MOUNT_FILE}"
                         else
@@ -461,13 +449,15 @@ join_domain () {
 # enter domain name
 DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
 
+logger "try to join the domain: ${DOMAIN_NAME}"
+
 #find domain controller
 find_domain_controller "${DOMAIN_NAME}"
 find_ntp_servers  "${DOMAIN_NAME}"
-DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk -F'PTR' '{print $2}' | tr -d '[:space:]' )
-DNS_SERVER_NAME=${DNS_SERVER_NAME%?}
-DOMAIN_NAME=$(echo "${DNS_SERVER_NAME}" | cut -d '.' -f2-)
+DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk '{ gsub(/[ \t]+/," "); print }' | cut -d' ' -f 5 |  awk '{ sub(/[\.]+$/, ""); print }')
 DOMAIN_CONTROLLER="${DNS_SERVER_NAME}"
+logger "using the following domain controller as admin server: ${DOMAIN_CONTROLLER}"
+logger "using the following time servers: ${NTP_SERVERS}"
 
 #set domain name in realm configuration
 set_domain_realmd "${DOMAIN_NAME}"
@@ -492,6 +482,7 @@ esac
 # configure krb5.conf before joining the domain
 configure_krb5_package "${DOMAIN_NAME}" "${DOMAIN_CONTROLLER}"
 
+logger "start joining the domain"
 
 #join the domain now
 join_domain "${DOMAIN_NAME}"
@@ -505,6 +496,8 @@ systemctl restart sssd
 echo "${JOIN_PASSWORD}" | kinit "${JOIN_USER}"
 # delete the password of the join user
 JOIN_PASSWORD=""
+
+logger "domain join successful"
 
 configure_file_servers "${DOMAIN_CONTROLLER}"
 
