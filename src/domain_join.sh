@@ -391,23 +391,26 @@ correct_dns_if_local_TLD () {
 
 # try to find domain controller automatically
 find_domain_controller () {
-        local DNS
+        local PDC
         local IP_CHECK
         local DOMAIN_NAME
         DOMAIN_NAME="${1}"
         
-        DNS=$(nslookup -type=srv _ldap._tcp.pdc._msdcs."${DOMAIN_NAME}" | grep "internet address" | cut -d"=" -f 2 |  tr -d '[:space:]')
+        PDC=$(nslookup -type=srv _ldap._tcp.pdc._msdcs."${DOMAIN_NAME}" | grep "_ldap._tcp.pdc._msdcs." | pcregrep -o1 "(\S+)\.$")
         
-        # check if DNS IP is valid, if not, user can enter it manually
-        IP_CHECK=$(echo "${DNS}" | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
+        # check if name is valid, if not, user can enter it manually
+        set +e
+        ping -c1 -W1 -q "${PDC}"        
+        IP_CHECK=$?
+        set -e
 
-        if [ -z "${IP_CHECK}" ]; then
-                DNS=$(dialog --title "set DNS Server IP manually"  --inputbox "Unable to determine IP of DNS Server automatically. You can enter it manually. If you leave it empty, script will exit." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
-                if [ -z "${DNS}" ]; then
+        if [ ${IP_CHECK} -ne 0 ]; then
+                PDC=$(dialog --title "set Domain Controller name manually"  --inputbox "Unable to determine Name of primary Domain Controller automatically. You can enter it manually. If you leave it empty, script will exit." 12 50 "" 3>&1 1>&2 2>&3 3>&-)
+                if [ -z "${PDC}" ]; then
                         exit 3
                 fi
         fi
-        DNS_IP="${DNS}"
+        DOMAIN_CONTROLLER="${PDC}"
 }
 
 # join the given domain 
@@ -454,8 +457,6 @@ logger "try to join the domain: ${DOMAIN_NAME}"
 #find domain controller
 find_domain_controller "${DOMAIN_NAME}"
 find_ntp_servers  "${DOMAIN_NAME}"
-DNS_SERVER_NAME=$(dig +noquestion -x "${DNS_IP}" | grep in-addr.arpa | awk '{ gsub(/[ \t]+/," "); print }' | cut -d' ' -f 5 |  awk '{ sub(/[\.]+$/, ""); print }')
-DOMAIN_CONTROLLER="${DNS_SERVER_NAME}"
 logger "using the following domain controller as admin server: ${DOMAIN_CONTROLLER}"
 logger "using the following time servers: ${NTP_SERVERS}"
 
