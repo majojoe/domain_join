@@ -28,6 +28,7 @@ KRB5_CONF="/etc/krb5.conf"
 NSSWITCH_FILE="/etc/nsswitch.conf"
 DNS_IP=""
 NTP_SERVERS=""
+SSSD_CONF_FILE="/etc/sssd/sssd.conf"
 
 if [ "$(id -u)" -ne 0 ]; then
         echo "This script must be run as root in order to join to the given domain. Exiting..."
@@ -253,7 +254,7 @@ configure_shares() {
                 for i in ${DRIVE_LIST}; do
                         i=$(echo "${i}" | tr -d "'")
                         MNT_POINT=$(echo "${i}" | tr -d '$')
-                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev,sec=krb5i,cruid=%(USERUID),${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
+                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev,echo_interval=15,sec=krb5i,cruid=%(USERUID),${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
                         if [ -f "${PAM_MOUNT_FILE}" ]; then
                                 xmlstarlet ed --inplace -s '/pam_mount' -t elem -n "${MOUNT_STR}" "${PAM_MOUNT_FILE}"
                         else
@@ -356,9 +357,16 @@ set_std_groups_for_domain() {
 # add possibility to login with xrdp when used
 allow_xrdp_login() {
 # add some options to sssd.conf to allow login with xrdp
-        SSSD_CONF_FILE="/etc/sssd/sssd.conf"
         if [ -f ${SSSD_CONF_FILE} ]; then
                 sed -i '/^\[domain\/.*/a ad_gpo_access_control = enforcing\nad_gpo_map_remote_interactive = +xrdp-sesman' "${SSSD_CONF_FILE}"
+        fi
+}
+
+# correct the krb5 template name
+correct_krb5_template_name() {
+# add some options to sssd.conf to allow login with xrdp
+        if [ -f ${SSSD_CONF_FILE} ]; then
+                sed -i '/^\[domain\/.*/a krb5_ccname_template=FILE:%d\/krb5cc_%U' "${SSSD_CONF_FILE}"
         fi
 }
 
@@ -507,6 +515,8 @@ set_sudo_users_or_groups ${FULLY_QUALIFIED_DN} "${DOMAIN_NAME}"
 set_std_groups_for_domain 
 
 allow_xrdp_login
+
+correct_krb5_template_name
 
 #correct input method for sddm - no onscreen keyboard anymore (if sddm is used). 
 correct_input_method
