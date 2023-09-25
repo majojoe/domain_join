@@ -254,7 +254,7 @@ configure_shares() {
                 for i in ${DRIVE_LIST}; do
                         i=$(echo "${i}" | tr -d "'")
                         MNT_POINT=$(echo "${i}" | tr -d '$')
-                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev,sec=krb5i,cruid=%(USERUID),${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
+                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev,echo_interval=15,sec=krb5i,cruid=%(USERUID),${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
                         if [ -f "${PAM_MOUNT_FILE}" ]; then
                                 xmlstarlet ed --inplace -s '/pam_mount' -t elem -n "${MOUNT_STR}" "${PAM_MOUNT_FILE}"
                         else
