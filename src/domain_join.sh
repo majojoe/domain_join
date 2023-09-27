@@ -29,6 +29,7 @@ NSSWITCH_FILE="/etc/nsswitch.conf"
 DNS_IP=""
 NTP_SERVERS=""
 SSSD_CONF_FILE="/etc/sssd/sssd.conf"
+KEYTAB_FILE="/etc/krb5.keytab"
 
 if [ "$(id -u)" -ne 0 ]; then
         echo "This script must be run as root in order to join to the given domain. Exiting..."
@@ -116,7 +117,7 @@ configure_krb5_package() {
         
         KRB5_UNCONF="/etc/krb5.conf.unconfigured"
         DOMAIN_NAME="${1}"
-        ADMIN_SERVER="${2}"
+        ADMIN_SERVER="${2^^}"
         if [ -f "${KRB5_UNCONF}" ]; then
                 cp "${KRB5_UNCONF}" "${KRB5_CONF}"
                 #realm name
@@ -124,8 +125,19 @@ configure_krb5_package() {
                 
                 #realm definiton
                 DOMAIN_UPPER=${DOMAIN_NAME^^}
-                REALM_DEFINITION="${DOMAIN_UPPER} = {\n"                
-                REALM_DEFINITION="${REALM_DEFINITION}        admin_server = ${ADMIN_SERVER}\n}"
+                REALM_DEFINITION="${DOMAIN_UPPER} = {"
+                DC_DNS_LIST=$(nslookup -type=srv _kerberos._tcp."${DOMAIN_NAME}" | grep "${DOMAIN_NAME}" | pcregrep -o1 "(\S+)\.$")
+                DC_LIST=()
+                while IFS= read -r DC; do
+                        DC_LIST+=("${DC}")
+                done <<< "$DC_DNS_LIST"
+
+                for i in "${DC_LIST[@]}"
+                do
+                        REALM_DEFINITION="${REALM_DEFINITION}\n        kdc = ${i^^}"
+                done
+                
+                REALM_DEFINITION="${REALM_DEFINITION}\n        admin_server = ${ADMIN_SERVER}\n}"
                 sed -i "s/REALM_DEFINITION/${REALM_DEFINITION}/g" "${KRB5_CONF}"
                 
                 # domain realm
@@ -456,6 +468,12 @@ join_domain () {
                 fi
         done        
 }
+
+#test if keytab is there, if so abort since we are joined to a domain already. This can lead to nasty errors with wrong entries in keytab
+if [ -f "${KEYTAB_FILE}" ]; then
+        dialog --msgbox "You are already in a domain. Either execute \"domain_leave.sh\" (recommended) or use command \"realm -v leave -U Administrator\" to leave the domain you are currently joined to." 7 100 3>&1 1>&2 2>&3 3>&-
+        exit 4
+fi
 
 # enter domain name
 DOMAIN_NAME=$(dialog --title "domain name" --inputbox "Enter the domain name you want to join to. \\nE.g.: example.com or example.local" 12 40 "${DOMAIN_NAME}" 3>&1 1>&2 2>&3 3>&-)
