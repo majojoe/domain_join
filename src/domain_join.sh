@@ -341,13 +341,17 @@ set_sudo_users_or_groups() {
                                 #use fully qualified domain names
                                 echo "\"${I_NO_SPACE}@${DN}\" ALL=(ALL:ALL) ALL" >> "${SUDOERS_AD_FILE}"
                                 if ! [[ "${I_NO_SPACE}" = %* ]]; then
+                                        set +e
                                         usermod -aG sudo "${I_NO_SPACE}@${DN}"
+                                        set -e
                                         echo "${I_NO_SPACE}@${DN}" >> "${DU_SUDO_FILE}"
                                 fi
                         else
                                 echo "\"${I_NO_SPACE}\" ALL=(ALL:ALL) ALL" >> "${SUDOERS_AD_FILE}"
                                 if ! [[ "${I_NO_SPACE}" = %* ]]; then
+                                        set +e
                                         usermod -aG sudo "${I_NO_SPACE}"
+                                        set -e
                                         echo "${I_NO_SPACE}" >> "${DU_SUDO_FILE}"
                                 fi
                         fi
