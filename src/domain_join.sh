@@ -266,7 +266,7 @@ configure_shares() {
                 for i in ${DRIVE_LIST}; do
                         i=$(echo "${i}" | tr -d "'")
                         MNT_POINT=$(echo "${i}" | tr -d '$')
-                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"iocharset=utf8,nosuid,nodev,echo_interval=15,sec=krb5i,cruid=%(USERUID),${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
+                        MOUNT_STR="volume fstype=\"cifs\" server=\"${FILE_SERVER}\" path=\"${i}\" mountpoint=\"/media/%(USER)/${MNT_POINT}\" options=\"dir_mode=0700,iocharset=utf8,nosuid,nodev,echo_interval=15,sec=krb5i,cruid=%(USERUID),${FILESERVER_OPTIONS}\" uid=\"5000-999999999\""
                         if [ -f "${PAM_MOUNT_FILE}" ]; then
                                 xmlstarlet ed --inplace -s '/pam_mount' -t elem -n "${MOUNT_STR}" "${PAM_MOUNT_FILE}"
                         else
@@ -377,6 +377,23 @@ allow_xrdp_login() {
                 sed -i '/^\[domain\/.*/a ad_gpo_access_control = enforcing\nad_gpo_map_remote_interactive = +xrdp-sesman' "${SSSD_CONF_FILE}"
         fi
 }
+
+# add possibility to speed up authentication by omitting lookup of group members
+speedup_authentication() {
+# add some options to sssd.conf to speed up authentication
+        if [ -f ${SSSD_CONF_FILE} ]; then
+                sed -i '/^\[domain\/.*/a ignore_group_members = True\nsubdomain_inherit = ignore_group_members' "${SSSD_CONF_FILE}"
+        fi
+}
+
+# make active directory to use LDAPS instead of strartTLS
+use_ldaps() {
+# use LDAPS
+        if [ -f ${SSSD_CONF_FILE} ]; then
+                sed -i '/^\[domain\/.*/a ad_use_ldaps = True' "${SSSD_CONF_FILE}"
+        fi
+}
+
 
 # correct the krb5 template name
 correct_krb5_template_name() {
@@ -542,5 +559,12 @@ correct_krb5_template_name
 
 #correct input method for sddm - no onscreen keyboard anymore (if sddm is used). 
 correct_input_method
+
+# add possibility to speed up authentication by omitting lookup of group members
+speedup_authentication
+
+# make active directory to use LDAPS instead of strartTLS
+use_ldaps
+
 
 echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFULL #################"
