@@ -386,12 +386,23 @@ speedup_authentication() {
         fi
 }
 
-# make active directory to use LDAPS instead of strartTLS
-use_ldaps() {
-# use LDAPS
-        if [ -f ${SSSD_CONF_FILE} ]; then
-                sed -i '/^\[domain\/.*/a ad_use_ldaps = True' "${SSSD_CONF_FILE}"
-        fi
+# make active directory to use LDAPS instead of strartTLS if available
+activate_ldaps_if_available() {
+       local DOMAIN_CONTROLLER
+        DOMAIN_CONTROLLER="${1}"
+        local RET
+        openssl s_client -quiet -connect "${DOMAIN_CONTROLLER}":636 </dev/null 
+        RET=$?
+        if [ 0 -eq $RET ]; then
+                # use LDAPS
+                if [ -f ${SSSD_CONF_FILE} ]; then
+                        sed -i '/^\[domain\/.*/a ad_use_ldaps = True' "${SSSD_CONF_FILE}"
+                fi                
+                openssl s_client -connect "${DOMAIN_CONTROLLER}":636 -showcerts </dev/null 2>/dev/null | openssl x509 -outform PEM > /tmp/domain_controller_certificate.pem
+                
+        else
+                dialog --title "No support for LDAPS" --msgbox "Your domain controller does not support LDAPS. This can be a security issue. You can activate LDAPS by configuring your domain controller in a proper way." 12 40
+        fi 
 }
 
 
@@ -564,7 +575,7 @@ correct_input_method
 speedup_authentication
 
 # make active directory to use LDAPS instead of strartTLS
-use_ldaps
+activate_ldaps_if_available "${DOMAIN_CONTROLLER}"
 
 
 echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFULL #################"
