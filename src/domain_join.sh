@@ -388,23 +388,29 @@ speedup_authentication() {
 
 # make active directory to use LDAPS instead of strartTLS if available
 activate_ldaps_if_available() {
-       local DOMAIN_CONTROLLER
-        DOMAIN_CONTROLLER="${1}"
-        local RET
-        openssl s_client -quiet -connect "${DOMAIN_CONTROLLER}":636 </dev/null 
-        RET=$?
-        if [ 0 -eq $RET ]; then
+        local DOMAIN_CONTROLLER="${1}"
+        if openssl s_client -quiet -connect "${DOMAIN_CONTROLLER}":636 -timeout 2 </dev/null &>/dev/null; then
                 # use LDAPS
                 if [ -f ${SSSD_CONF_FILE} ]; then
                         sed -i '/^\[domain\/.*/a ad_use_ldaps = True' "${SSSD_CONF_FILE}"
-                fi                
-                openssl s_client -connect "${DOMAIN_CONTROLLER}":636 -showcerts </dev/null 2>/dev/null | openssl x509 -outform PEM > /tmp/domain_controller_certificate.pem
+                fi                                
+                openssl s_client -connect "${DOMAIN_CONTROLLER}":636 -showcerts </dev/null &>/dev/null | openssl x509 -outform PEM > /tmp/domain_controller_certificate.pem
+                echo "You can find your LDAPS certificate at the following location: /tmp/domain_controller_certificate.pem"
                 
         else
                 dialog --title "No support for LDAPS" --msgbox "Your domain controller does not support LDAPS. This can be a security issue. You can activate LDAPS by configuring your domain controller in a proper way." 12 40
         fi 
 }
 
+remove_sssd_services_line() {
+    local config_file="${1:-/etc/sssd/sssd.conf}"
+
+    if [ -f ${SSSD_CONF_FILE} ]; then
+        sed -i '/^services[[:space:]]=[[:space:]]*/d' "${SSSD_CONF_FILE}" 2>/dev/null
+    fi
+
+    return 0
+}
 
 # correct the krb5 template name
 correct_krb5_template_name() {
@@ -577,5 +583,7 @@ speedup_authentication
 # make active directory to use LDAPS instead of strartTLS
 activate_ldaps_if_available "${DOMAIN_CONTROLLER}"
 
+# remove line in sssd.conf with 'services = nss, pam'
+remove_sssd_services_line
 
 echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFULL #################"
