@@ -122,7 +122,7 @@ configure_krb5_package() {
                 #realm name
                 sed -i "s/REALM_NAME/${DOMAIN_NAME^^}/g" "${KRB5_CONF}"
                 
-                #realm definiton
+                #realm definition
                 DOMAIN_UPPER=${DOMAIN_NAME^^}
                 REALM_DEFINITION="${DOMAIN_UPPER} = {"
                 DC_DNS_LIST=$(nslookup -type=srv _kerberos._tcp."${DOMAIN_NAME}" | grep "${DOMAIN_NAME}" | pcregrep -o1 "(\S+)\.$")
@@ -155,7 +155,7 @@ find_ntp_servers() {
         DOMAIN_NAME="${1}"
         NTP_SERVERS_LIST=""
         
-        #realm definiton
+        #realm definition
         DOMAIN_UPPER=${DOMAIN_NAME^^}
         DC_DNS_LIST=$(nslookup -type=srv _kerberos._tcp."${DOMAIN_NAME}" | grep "${DOMAIN_NAME}" | pcregrep -o1 "(\S+)\.$")
         DC_LIST=()
@@ -176,7 +176,7 @@ install_krb5_package() {
         apt install krb5-user -y
 }
 
-# set the domanin name in realmd configuration
+# set the domain name in realmd configuration
 # first param: domain name
 set_domain_realmd() {
         local DOMAIN_NAME
@@ -188,7 +188,7 @@ set_domain_realmd() {
         fi
 }
 
-# set the domanin in /etc/hosts
+# set the domain in /etc/hosts
 # first param: domain name
 set_domain_hosts() {
         local DOMAIN_NAME
@@ -578,10 +578,10 @@ correct_input_method
 # add possibility to speed up authentication by omitting lookup of group members
 speedup_authentication
 
-# make active directory to use LDAPS instead of strartTLS
+# make active directory to use LDAPS instead of startTLS
 activate_ldaps_if_available "${DOMAIN_CONTROLLER}"
 
 # remove line in sssd.conf with 'services = nss, pam'
 remove_sssd_services_line
 
-echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFULL #################"
+echo "############### DOMAIN JOIN  AND SHARES CONFIGURATION SUCCESSFUL #################"
