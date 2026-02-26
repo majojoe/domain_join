@@ -26,7 +26,6 @@ FULLY_QUALIFIED_DN=0
 SDDM_CONF_FILE="/etc/sddm.conf"
 KRB5_CONF="/etc/krb5.conf"
 NSSWITCH_FILE="/etc/nsswitch.conf"
-DNS_IP=""
 NTP_SERVERS=""
 SSSD_CONF_FILE="/etc/sssd/sssd.conf"
 KEYTAB_FILE="/etc/krb5.keytab"
@@ -208,7 +207,6 @@ set_domain_hosts() {
 # set the timeserver to use
 # first param:  list with ntp servers 
 set_timeserver() {
-        local NTP_SERVER
         local DOMAIN_CONTROLLERS
         
         DOMAIN_CONTROLLERS="${1}"
