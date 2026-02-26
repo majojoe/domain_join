@@ -389,11 +389,12 @@ speedup_authentication() {
 # make active directory to use LDAPS instead of strartTLS if available
 activate_ldaps_if_available() {
         local DOMAIN_CONTROLLER="${1}"
-        if openssl s_client -quiet -connect "${DOMAIN_CONTROLLER}":636 -timeout 2 </dev/null &>/dev/null; then
+        if openssl s_client -quiet -connect "${DOMAIN_CONTROLLER}":636 </dev/null &>/dev/null; then
                 # use LDAPS
                 if [ -f ${SSSD_CONF_FILE} ]; then
                         sed -i '/^\[domain\/.*/a ad_use_ldaps = True' "${SSSD_CONF_FILE}"
                 fi                                
+                # shellcheck disable=SC2260
                 openssl s_client -connect "${DOMAIN_CONTROLLER}":636 -showcerts </dev/null &>/dev/null | openssl x509 -outform PEM > /tmp/domain_controller_certificate.pem
                 echo "You can find your LDAPS certificate at the following location: /tmp/domain_controller_certificate.pem"
                 
@@ -403,7 +404,6 @@ activate_ldaps_if_available() {
 }
 
 remove_sssd_services_line() {
-    local config_file="${1:-/etc/sssd/sssd.conf}"
 
     if [ -f ${SSSD_CONF_FILE} ]; then
         sed -i '/^services[[:space:]]=[[:space:]]*/d' "${SSSD_CONF_FILE}" 2>/dev/null
