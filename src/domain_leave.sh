@@ -99,6 +99,11 @@ fi
 # remove line that adds the std groups for all domain users
 sed -i '/*;*;*;Al0000-2400;adm,cdrom,dip,plugdev,lpadmin,lxd,sambashare/d' /etc/security/group.conf
 
+# remove eventual added lines in fstab
+set +e
+sed -i.bak '/.*#added by domain_join\.sh/Id' /etc/fstab
+set -e
+
 #remove domain from hosts file
 remove_domain_hosts "${DOMAIN_NAME}"
 

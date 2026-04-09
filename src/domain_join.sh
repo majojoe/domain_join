@@ -265,8 +265,7 @@ write_fstab_entry() {
         mkdir -p "${MNT_POINT}"
     fi
 
-    # //fileserver.deine-domain.de/share /mnt/smb cifs sec=krb5,multiuser,user=dein-nutzer,noauto,x-systemd.automount,x-systemd.idle-timeout=1min 0 0
-    FSTAB_STR="//${FILE_SERVER}/${SHARE} ${MNT_POINT} cifs sec=krb5,multiuser,user=${TECH_USER},noauto,x-systemd.automount,x-systemd.idle-timeout=1min 0 0"
+    FSTAB_STR="//${FILE_SERVER}/${SHARE} ${MNT_POINT} cifs sec=krb5,multiuser,user=${TECH_USER},noauto,x-systemd.automount,x-systemd.idle-timeout=1min 0 0 #added by domain_join.sh"
 
     if ! grep -q "//${FILE_SERVER}/${SHARE}" "${FSTAB_FILE}"; then
         echo "${FSTAB_STR}" >> "${FSTAB_FILE}"
