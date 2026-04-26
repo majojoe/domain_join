@@ -9,14 +9,7 @@ onerr() {
         exit 1
 }
 
-#trap handler 
-onexit() { 
-        # delete password on exit
-        JOIN_PASSWORD=""
-}
 
-
-JOIN_USER=""
 DOMAIN_NAME=""
 DOMAIN_CONTROLLER=""
 
@@ -86,8 +79,16 @@ configure_shares() {
         local CHECKLIST
         local FILESERVER_OPTIONS=""
 
+
         FILE_SERVER=$(dialog --title "fileserver" --inputbox "Enter the fileserver to use for mounting of drives. \\nE.g.: srv-file01.example.local" 12 40 "${DOMAIN_CONTROLLER}" 3>&1 1>&2 2>&3 3>&-)
-        DRIVE_LIST=$(smbclient --use-kerberos=required -N  -U "${TECH_USER}" -L "${FILE_SERVER}" 2> /dev/null | grep Disk  | grep -v -E "ADMIN\\$|SYSVOL|NETLOGON" | cut -d " " -f 1 | grep -E "[a-zA-Z0-9]{2,}(\\$)*" | tr -d '\t')
+
+        if [ -z "${TECH_USER}" ]; then
+                        RUN_AS_USER=${USER:-$SUDO_USER}
+                        DRIVE_LIST=$(runuser -u "$RUN_AS_USER" smbclient --use-kerberos=required -N  -U "${TECH_USER}" -L "${FILE_SERVER}" 2> /dev/null | grep Disk  | grep -v -E "ADMIN\\$|SYSVOL|NETLOGON" | cut -d " " -f 1 | grep -E "[a-zA-Z0-9]{2,}(\\$)*" | tr -d '\t')
+                else
+                        DRIVE_LIST=$(smbclient --use-kerberos=required -N  -U "${TECH_USER}" -L "${FILE_SERVER}" 2> /dev/null | grep Disk  | grep -v -E "ADMIN\\$|SYSVOL|NETLOGON" | cut -d " " -f 1 | grep -E "[a-zA-Z0-9]{2,}(\\$)*" | tr -d '\t')
+        fi
+
         CHECKLIST=""
 
         if [ -n "${DRIVE_LIST}" ]; then
