@@ -162,8 +162,15 @@ setup_technical_user() {
                 fi
         done
 
-        # Add to keytab (silent)
-        printf "addent -password -p %s@%s -k 1 -e aes256-cts-hmac-sha1-96\n%s\nwkt %s\nq\n" "${TECH_USER}" "${DOMAIN_NAME^^}" "${TECH_PASS}" "${KEYTAB_FILE}" | ktutil &>/dev/null
+        # Add to keytab using a Here-Document for better robustness
+        ktutil <<-EOF &>/dev/null
+                addent -password -p ${TECH_USER}@${DOMAIN_NAME^^} -k 1 -e aes256-cts-hmac-sha1-96
+                ${TECH_PASS}
+                addent -password -p ${TECH_USER}@${DOMAIN_NAME^^} -k 1 -e aes128-cts-hmac-sha1-96
+                ${TECH_PASS}
+                wkt ${KEYTAB_FILE}
+                q
+EOF
         TECH_PASS=""
 }
 
@@ -249,9 +256,9 @@ find_domain_controller () {
 # --- Execution ---
 
 
-DOMAIN_NAME=$(realm list | grep domain-name | cut -d ':' -f2 | tr -d ' ')
+DOMAIN_NAME=$(realm list | grep domain-name | head -n1 | cut -d ':' -f2 | tr -d ' ')
 if [ -z "${DOMAIN_NAME}" ]; then
-        echo "no domain found. Exitiing..."
+        echo "no domain found. Exiting..."
         exit 1
 fi
 
