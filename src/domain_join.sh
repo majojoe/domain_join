@@ -361,8 +361,6 @@ setup_technical_user() {
 
         # Add to keytab (silent)
         printf "addent -password -p %s@%s -k 1 -e aes256-cts-hmac-sha1-96\n%s\nwkt %s\nq\n" "${TECH_USER}" "${DOMAIN_NAME^^}" "${TECH_PASS}" "${KEYTAB_FILE}" | ktutil &>/dev/null
-
-        echo "${TECH_USER}"
 }
 
 # ask if and how shares should be configured
@@ -689,7 +687,7 @@ set_sudo_users_or_groups ${FULLY_QUALIFIED_DN} "${DOMAIN_NAME}"
 
 set_std_groups_for_domain 
 
-allow_xrdp_login
+#allow_xrdp_login
 
 correct_krb5_template_name
 
